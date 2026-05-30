@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
     --sage:#a9c0b4; --sage-d:#7fa08f;
@@ -44,10 +45,10 @@
     font-family:'Gowun Batang',serif; font-weight:700; font-size:14px; cursor:pointer; }
 
   /* 목록 테이블 */
-  .list-wrap{ margin:16px; background:var(--card); border-radius:12px; box-shadow:var(--shadow); overflow:hidden; }
+  .list-wrap{ margin:16px; background:var(--card); border-radius:12px; box-shadow:var(--shadow); overflow-x:auto; }
   table.list{ width:100%; border-collapse:collapse; }
-  table.list th{ background:var(--head2); color:#473f55; font-size:13px; padding:11px 8px; }
-  table.list td{ padding:11px 8px; font-size:13.5px; text-align:center; border-bottom:1px solid var(--line); }
+  table.list th{ background:var(--head2); color:#473f55; font-size:13px; padding:11px 8px; white-space:nowrap; }
+  table.list td{ padding:11px 8px; font-size:13.5px; text-align:center; border-bottom:1px solid var(--line); white-space:nowrap; }
   table.list tr.r{ cursor:pointer; }
   table.list tr.r:hover{ background:var(--lav-bg); }
   table.list .nm{ font-weight:700; color:var(--ink); }
@@ -57,9 +58,11 @@
 
   /* 성적표 (학생용과 동일) */
   #report{ display:none; margin-top:8px; }
-  #report .back{ margin:16px; }
+  #report .back{ margin:16px; display:flex; gap:8px; }
   #report .back button{ padding:9px 16px; border:1.5px solid var(--lav); background:#fff; color:var(--lav-d);
     border-radius:9px; font-family:'Gowun Batang',serif; font-weight:700; cursor:pointer; font-size:14px; }
+  #report .back .save{ background:var(--lav-d); color:#fff; border-color:var(--lav-d); }
+  #report .back .save:disabled{ opacity:.6; cursor:default; }
   #report .rbrand{ background:linear-gradient(135deg,#d8cfe6 0%,#c4d4cc 100%);
     padding:22px; display:flex; align-items:center; justify-content:space-between; border-radius:14px; box-shadow:var(--shadow); margin:16px; }
   #report .rbrand .name{ font-family:'Gowun Batang',serif; font-weight:700; font-size:24px; letter-spacing:2px; color:#473f55; }
@@ -86,7 +89,7 @@
   #report table.areatbl tr.total td{ background:#efeef1; font-weight:700; }
   #report .chart{ background:#fff; border-radius:10px; box-shadow:var(--shadow); padding:14px 10px 8px; margin-top:14px; }
   #report .grid-wrap{ overflow-x:auto; background:#fff; border-radius:10px; box-shadow:var(--shadow); padding:4px; }
-  #report table.scoretbl{ min-width:480px; border-collapse:collapse; }
+  #report table.scoretbl{ width:100%; min-width:480px; border-collapse:collapse; }
   #report table.scoretbl th,#report table.scoretbl td{ padding:7px 5px; font-size:12.5px; border:1px solid #eee; text-align:center; }
   #report .rowlabel{ background:#dcd5e6; color:#473f55; font-weight:700; white-space:nowrap; font-size:12px; }
   #report .qn{ background:#e8e3f0; font-weight:700; color:#4a4356; }
@@ -116,7 +119,7 @@
   <div class="list-wrap">
     <div class="loading" id="loading">불러오는 중…</div>
     <table class="list" id="listTbl" style="display:none;">
-      <thead><tr><th>응시일</th><th>회차</th><th>이름</th><th>학교</th><th>학년</th><th>과목</th><th>점수</th><th>등급</th></tr></thead>
+      <thead><tr><th>이름</th><th>학교</th><th>학년</th><th>과목</th><th>점수</th><th>등급</th><th>회차</th><th>응시일</th></tr></thead>
       <tbody id="listBody"></tbody>
     </table>
     <div class="empty" id="empty" style="display:none;">제출된 답안이 없습니다.</div>
@@ -141,9 +144,20 @@
   function apiReady(){ return API_URL && API_URL.indexOf('script.google.com') !== -1; }
 
   let ALL=[];   // 전체 응답 목록
+  let reportFileName='성적표';   // 이미지 저장 시 파일명
 
   function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
     clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
+
+  // 응시일 표시 정리: 시트에 날짜값으로 저장돼 영어로 읽혀도 'M월 D일'로 보이게
+  function fmtDate(v){
+    v = String(v || '').trim();
+    if(!v) return '';
+    if(v.indexOf('월') >= 0) return v;                 // 이미 'M월 D일' 형식이면 그대로
+    const d = new Date(v.replace(/\s*\(.*\)\s*$/, '')); // 끝의 (한국 표준시) 같은 꼬리 제거
+    if(!isNaN(d.getTime())) return (d.getMonth()+1) + '월 ' + d.getDate() + '일';
+    return v;
+  }
 
   // 진단 메시지를 화면에 표시
   function diag(msg){
@@ -205,9 +219,9 @@
     if(!rows.length){ tbl.style.display='none'; empty.style.display='block'; return; }
     empty.style.display='none'; tbl.style.display='table';
     body.innerHTML=rows.map(r=>`<tr class="r" onclick="openReport(${r.row})">
-      <td>${r.examDate||''}</td><td>${r.examName||''}</td><td class="nm">${r.name||''}</td>
-      <td>${r.school||''}</td><td>${r.grade||''}</td><td>${r.subject||''}</td>
-      <td class="sc">${r.got}</td><td>${r.gradeLevel||''}</td></tr>`).join('');
+      <td class="nm">${r.name||''}</td><td>${r.school||''}</td><td>${r.grade||''}</td>
+      <td>${r.subject||''}</td><td class="sc">${r.got}</td><td>${r.gradeLevel||''}</td>
+      <td>${r.examName||''}</td><td>${fmtDate(r.examDate)}</td></tr>`).join('');
   }
 
   // 화면에 계속 남는 오류 박스 (성적표 조회 실패 원인 표시)
@@ -243,6 +257,8 @@
   function renderReport(res){
    try{
     const st=res.student, exam=res.exam, r=res.result;
+    reportFileName = (String(st.name||'학생') + '_' + String(exam.code||'') + '_성적표')
+      .replace(/[\\/:*?"<>|\s]+/g,'_').replace(/^_+|_+$/g,'');
     const catCount={}; r.areas.forEach(a=>catCount[a.cat]=(catCount[a.cat]||0)+1);
     const catSeen={}; let areaRows='';
     r.areas.forEach(a=>{ const first=!catSeen[a.cat]; catSeen[a.cat]=true;
@@ -258,19 +274,20 @@
     }
     const PLOT=160;
     const bars=r.areas.map(a=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">${a.rate}</div>
-      <div style="width:58%;height:${a.rate/100*PLOT}px;background:var(--bar);border-radius:3px 3px 0 0;"></div></div>`).join('');
-    const labels=r.areas.map(a=>`<div style="flex:1;text-align:center;font-size:10.5px;color:var(--ink);line-height:1.2;word-break:keep-all;padding:0 2px;">${a.name}</div>`).join('');
-    const chart=`<div style="display:flex;align-items:flex-end;gap:4px;height:${PLOT+20}px;border-bottom:1.5px solid var(--line);padding:0 6px;">${bars}</div>
+      <div style="font-size:11px;color:#8a8590;margin-bottom:3px;">${a.rate}</div>
+      <div style="width:58%;height:${a.rate/100*PLOT}px;background:#9b8fb5;border-radius:3px 3px 0 0;"></div></div>`).join('');
+    const labels=r.areas.map(a=>`<div style="flex:1;text-align:center;font-size:10.5px;color:#3f3a44;line-height:1.2;word-break:keep-all;padding:0 2px;">${a.name}</div>`).join('');
+    const chart=`<div style="display:flex;align-items:flex-end;gap:4px;height:${PLOT+20}px;border-bottom:1.5px solid #e4e0e8;padding:0 6px;">${bars}</div>
       <div style="display:flex;gap:4px;padding:7px 6px 0;">${labels}</div>`;
 
     document.getElementById('report').innerHTML=`
-      <div class="back"><button onclick="closeReport()">← 목록으로</button></div>
+      <div class="back"><button onclick="closeReport()">← 목록으로</button><button class="save" onclick="saveReportImage()">이미지로 저장</button></div>
+      <div id="reportCard">
       <div class="rbrand"><div><div class="name">이수경국어</div><div class="sub">Shueguk</div></div><div class="logo">Shueguk</div></div>
       <div class="tbar">2026 주간 모의고사 성적표 · ${exam.code}</div>
       <section><h2>1. 학생정보</h2>
         <table class="rt info"><tr><th>성명</th><th>학교</th><th>학년</th><th>선택과목</th><th>응시일</th></tr>
-        <tr><td>${st.name}</td><td>${st.school}</td><td>${st.grade}</td><td>${exam.subject}</td><td>${st.examDate}</td></tr></table></section>
+        <tr><td>${st.name}</td><td>${st.school}</td><td>${st.grade}</td><td>${exam.subject}</td><td>${fmtDate(st.examDate)}</td></tr></table></section>
       <section><h2>2. 성적</h2>
         <table class="rt score"><tr><th>점수(100점 만점)</th><th>등급</th><th>등급컷</th></tr>
         <tr><td class="big">${r.got}</td><td class="big">${r.grade}</td><td>${exam.cuts.join('-')}</td></tr></table></section>
@@ -281,7 +298,8 @@
         <div class="chart">${chart}</div></section>
       <section><h2>4. 문항 채점표</h2>
         <div class="grid-wrap">${block(1,15)}${block(16,30)}${block(31,45)}</div>
-        <div class="legend">정오 칸의 숫자 = 획득 배점 · 0 = 오답</div></section>`;
+        <div class="legend">정오 칸의 숫자 = 획득 배점 · 0 = 오답</div></section>
+      </div>`;
     document.getElementById('listView').style.display='none';
     document.getElementById('report').style.display='block';
     window.scrollTo(0,0);
@@ -293,6 +311,29 @@
     document.getElementById('report').style.display='none';
     document.getElementById('listView').style.display='block';
     window.scrollTo(0,0);
+  }
+
+  // 성적표를 PNG 이미지로 저장
+  function saveReportImage(){
+    const card=document.getElementById('reportCard');
+    if(!card){ toast('성적표를 먼저 열어주세요'); return; }
+    if(typeof html2canvas==='undefined'){ toast('이미지 모듈을 불러오지 못했습니다. 인터넷 연결 후 새로고침해 주세요'); return; }
+    const btn=document.querySelector('#report .back .save');
+    if(btn){ btn.disabled=true; btn.textContent='저장 중…'; }
+    toast('이미지 만드는 중…');
+    const finish=()=>{ if(btn){ btn.disabled=false; btn.textContent='이미지로 저장'; } };
+    const run=()=>html2canvas(card,{ scale:2, backgroundColor:'#f7f6f3', useCORS:true,
+        windowWidth:card.scrollWidth, windowHeight:card.scrollHeight })
+      .then(function(canvas){
+        const link=document.createElement('a');
+        link.download=(reportFileName||'성적표')+'.png';
+        link.href=canvas.toDataURL('image/png');
+        link.click();
+        toast('이미지를 저장했습니다');
+        finish();
+      })
+      .catch(function(e){ toast('이미지 저장에 실패했습니다'); finish(); });
+    if(document.fonts && document.fonts.ready){ document.fonts.ready.then(run); } else { run(); }
   }
 
   reload();  // 시작 시 목록 로드
