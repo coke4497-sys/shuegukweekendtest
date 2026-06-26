@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>주말 모의고사 신청 현황 · 이수경국어</title>
+<meta name="theme-color" content="#c6d5d2" />
+<link rel="stylesheet" href="fonts.css" />
+<style>
+  :root{
+    --sage:#a9c0b4; --sage-d:#7fa08f;
+    --lav:#b8b0cc; --lav-d:#8d83a8; --lav-bg:#e8e3f0;
+    --ink:#3f3a44; --muted:#8a8590;
+    --line:#e4e0e8; --paper:#f7f6f3; --card:#ffffff;
+    --head:#cdd9e0; --head2:#dcd5e6;
+    --ok:#1b8a3a; --ok-bg:#e3f2e8; --bad:#d0473f;
+    --shadow:0 2px 12px rgba(63,58,68,.07);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Gowun Dodum',-apple-system,system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    background:var(--paper); color:var(--ink);
+    max-width:760px; margin:0 auto; padding:0 0 50px; line-height:1.5;
+  }
+
+  /* 헤더 배너 */
+  header#topbar{
+    background:linear-gradient(135deg,#d8cfe6 0%,#c4d4cc 100%);
+    padding:20px 22px 18px; border-radius:0 0 22px 22px; box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  }
+  header#topbar .brand .name{ font-family:'Gowun Batang',serif; font-weight:700; font-size:23px; letter-spacing:2px; color:#473f55; }
+  header#topbar .brand .sub{ font-family:'Gowun Batang',serif; font-size:13px; color:#5d5568; letter-spacing:2px; margin-top:3px; }
+  .head-actions{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .updated{ font-size:12px; color:#5d5568; }
+  .refresh{ border:none; background:rgba(255,255,255,.6); color:#473f55;
+    font-family:'Gowun Batang',serif; font-weight:700; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer; }
+  .refresh:hover{ background:rgba(255,255,255,.85); }
+  .refresh:disabled{ opacity:.5; cursor:default; }
+  .toggle-open{ border:none; background:rgba(255,255,255,.6);
+    font-family:'Gowun Batang',serif; font-weight:700; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer; color:#473f55; }
+  .toggle-open.open{ color:var(--sage-d); }
+  .toggle-open.closed{ color:var(--bad); }
+  .toggle-open:disabled{ opacity:.6; cursor:default; }
+
+  .title-bar{ background:var(--lav-bg); margin:16px; padding:11px 18px; border-radius:10px;
+    font-family:'Gowun Batang',serif; font-size:15px; font-weight:700; color:#4a4356; text-align:center; }
+
+  .state{ margin:40px auto; padding:0 20px; text-align:center; color:var(--muted); }
+  .state.err{ color:var(--bad); font-weight:700; }
+
+  #dashboard{ display:none; }
+
+  /* 신청 링크 복사 */
+  .linkbar{ background:var(--card); border-radius:14px; box-shadow:var(--shadow); padding:16px 18px; margin:16px; }
+  .linkbar h2{ font-size:14px; font-family:'Gowun Batang',serif; font-weight:700; color:var(--ink); margin:0 0 10px;
+    display:flex; align-items:center; gap:8px; }
+  .linkbar h2::before{ content:""; width:8px; height:8px; border-radius:50%; background:var(--sage); }
+  .linkrow{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .linkrow input{ flex:1; min-width:200px; font-family:inherit; font-size:13.5px; color:var(--ink); background:#fafafb;
+    border:1.5px solid var(--line); border-radius:10px; padding:11px 12px; }
+  .linkrow button{ border:none; background:var(--lav-d); color:#fff; font-family:'Gowun Batang',serif; font-weight:700;
+    font-size:13.5px; padding:11px 18px; border-radius:10px; cursor:pointer; white-space:nowrap; }
+  .linkrow button:active{ opacity:.85; }
+  .linkrow .copied{ color:var(--sage-d); font-weight:700; font-size:12.5px; }
+
+  /* 주차 선택 */
+  .weekbar{ display:flex; align-items:center; gap:8px; margin:16px; }
+  .weekbar select{ flex:none; min-width:180px; font-family:'Gowun Batang',serif; font-size:14.5px; font-weight:700; color:#4a4356;
+    background:#fff; border:1.5px solid var(--line); border-radius:10px; padding:11px 32px 11px 14px;
+    -webkit-appearance:none; appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238d83a8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; }
+  .weekbar select:focus{ outline:none; border-color:var(--lav); }
+  .wk-nav{ border:1.5px solid var(--line); background:#fff; color:var(--lav-d); font-size:14px;
+    width:40px; height:40px; border-radius:10px; cursor:pointer; flex:none; }
+  .wk-nav:hover:not(:disabled){ border-color:var(--lav); background:var(--lav-bg); }
+  .wk-nav:disabled{ opacity:.35; cursor:default; }
+  .wk-hint{ font-size:12.5px; color:var(--muted); margin-left:4px; }
+
+  /* 통계 카드 */
+  .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:16px; }
+  .stat{ background:var(--card); border-radius:14px; box-shadow:var(--shadow); padding:16px 16px; }
+  .stat .n{ font-family:'Gowun Batang',serif; font-size:26px; font-weight:700; color:var(--lav-d); line-height:1.1; }
+  .stat .n .cap{ font-size:14px; font-weight:700; color:var(--muted); }
+  .stat .l{ font-size:12.5px; color:var(--muted); margin-top:4px; }
+  .stat .sub{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .stat.sat .n{ color:var(--sage-d); }
+  .stat.sun .n{ color:var(--lav-d); }
+  .stat .barwrap{ height:7px; background:var(--line); border-radius:99px; overflow:hidden; margin-top:9px; }
+  .stat .bar{ display:block; height:100%; border-radius:99px; }
+  .stat.sat .bar{ background:var(--sage-d); }
+  .stat.sun .bar{ background:var(--lav-d); }
+  .stat .full{ color:var(--bad); font-weight:700; }
+
+  /* 필터 */
+  .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:16px; }
+  .controls input[type=text], .controls select{
+    font-family:inherit; font-size:14px; color:var(--ink); background:#fff; border:1.5px solid var(--line);
+    border-radius:10px; padding:10px 12px; -webkit-appearance:none; appearance:none; }
+  .controls input[type=text]{ flex:1; min-width:140px; }
+  .controls input:focus, .controls select:focus{ outline:none; border-color:var(--lav); }
+  .controls select{ padding-right:32px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a8590' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; }
+
+  .count-label{ font-size:12.5px; color:var(--muted); margin:14px 16px 8px; }
+
+  /* 목록 표 */
+  .table-card{ background:var(--card); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; margin:0 16px; }
+  .tbl-scroll{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td{ text-align:left; padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:middle; white-space:nowrap; }
+  th{ font-size:12.5px; font-weight:700; color:#473f55; background:var(--head2); }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:var(--lav-bg); }
+  td.when{ color:var(--muted); font-size:12px; }
+  td.nm{ font-weight:700; }
+  td.id{ font-variant-numeric:tabular-nums; color:var(--muted); }
+  .tag{ display:inline-block; font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; }
+  .tag.sat{ background:rgba(127,160,143,.16); color:var(--sage-d); }
+  .tag.sun{ background:rgba(141,131,168,.16); color:var(--lav-d); }
+  .empty{ padding:40px; text-align:center; color:var(--muted); }
+
+  /* 비밀번호 게이트 */
+  .gate{ max-width:360px; margin:80px auto; padding:0 20px; }
+  .gate-card{ background:var(--card); border-radius:16px; box-shadow:var(--shadow); padding:32px 26px; text-align:center; }
+  .gate .name{ font-family:'Gowun Batang',serif; font-weight:700; font-size:23px; letter-spacing:2px; color:#473f55; }
+  .gate .sub{ font-family:'Gowun Batang',serif; font-size:13px; color:#5d5568; letter-spacing:2px; margin-top:3px; }
+  .gate h1{ font-size:13.5px; font-weight:400; margin:14px 0 20px; color:var(--muted); }
+  .gate input{ width:100%; font-family:inherit; font-size:16px; border:1.5px solid var(--line); background:#fafafb;
+    border-radius:10px; padding:13px 14px; -webkit-appearance:none; appearance:none; }
+  .gate input:focus{ outline:none; border-color:var(--lav); background:#fff; }
+  .gate button{ width:100%; border:none; background:var(--lav-d); color:#fff; font-family:'Gowun Batang',serif; font-weight:700;
+    font-size:16px; padding:14px; border-radius:12px; cursor:pointer; margin-top:12px; letter-spacing:1px; }
+  .gate button:active{ opacity:.85; }
+  .gate button:disabled{ opacity:.6; cursor:default; }
+  .gate .ge{ color:var(--bad); font-size:12.5px; font-weight:700; margin-top:12px; min-height:1.1em; }
+
+  @media (max-width:600px){ .stats{ grid-template-columns:repeat(2,1fr); } }
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="name">이수경국어</div>
+    <div class="sub">Shueguk</div>
+    <h1>교사용 · 주말 모의고사 신청 현황</h1>
+    <input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password" />
+    <button id="enter">확인</button>
+    <div class="ge" id="gate-err"></div>
+  </div>
+</div>
+
+<header id="topbar" style="display:none;">
+  <div class="brand">
+    <div class="name">이수경국어</div>
+    <div class="sub">Shueguk · 신청 관리</div>
+  </div>
+  <div class="head-actions">
+    <span class="updated" id="updated"></span>
+    <button class="toggle-open" id="toggle-open" style="display:none;"></button>
+    <button class="refresh" id="refresh">새로고침</button>
+  </div>
+</header>
+
+<div class="state" id="state" style="display:none;">신청 현황을 불러오는 중…</div>
+
+<main id="dashboard">
+  <div class="title-bar">주말 실전 모의고사 신청 현황</div>
+
+  <div class="linkbar">
+    <h2>학생 신청 링크</h2>
+    <div class="linkrow">
+      <input type="text" id="signup-link" readonly />
+      <button id="copy-link">링크 복사</button>
+      <span class="copied" id="copied-msg"></span>
+    </div>
+  </div>
+
+  <div class="weekbar">
+    <button class="wk-nav" id="week-prev" title="이전 주">◀</button>
+    <select id="f-week"><option value="">전체 주차</option></select>
+    <button class="wk-nav" id="week-next" title="다음 주">▶</button>
+    <span class="wk-hint" id="week-hint"></span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="s-students">0</div><div class="l">신청 학생 수</div></div>
+    <div class="stat sat">
+      <div class="n"><span id="s-sat">0</span><span class="cap">/<span id="s-cap-sat">37</span></span></div>
+      <div class="l">토요일</div><div class="sub" id="s-sat-date"></div>
+      <div class="barwrap"><span class="bar" id="s-sat-bar" style="width:0%"></span></div>
+    </div>
+    <div class="stat sun">
+      <div class="n"><span id="s-sun">0</span><span class="cap">/<span id="s-cap-sun">37</span></span></div>
+      <div class="l">일요일</div><div class="sub" id="s-sun-date"></div>
+      <div class="barwrap"><span class="bar" id="s-sun-bar" style="width:0%"></span></div>
+    </div>
+    <div class="stat"><div class="n" id="s-latest">–</div><div class="l">최근 신청</div><div class="sub" id="s-latest-who"></div></div>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="q" placeholder="이름 · 학교 검색" />
+    <select id="f-day"><option value="">전체 요일</option><option>토요일</option><option>일요일</option></select>
+    <select id="f-grade"><option value="">전체 학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+    <select id="f-subject"><option value="">전체 과목</option><option>화법과작문</option><option>언어와매체</option></select>
+    <select id="f-school"><option value="">전체 학교</option></select>
+  </div>
+
+  <div class="count-label" id="count-label"></div>
+  <div id="list"></div>
+</main>
+
+<script>
+  /* ============================================================
+     DATA_URL : Apps Script 웹앱 주소(.../exec) — signup_code.gs 배포 주소
+     ============================================================ */
+  const DATA_URL = "https://script.google.com/macros/s/AKfycbzdqac0xTnCaOo_t_2swJQqdfxjiA14sTo-ThTV8VvwcwaTucM1MQGeJfMfV4lNLM75/exec";
+
+  const DAY_CLASS = { "토요일":"sat", "일요일":"sun" };
+  let DAY_CAP = 37;
+
+  // 제출 시각을 안전하게 Date 로 변환
+  function toDate(ts){
+    if(!ts) return null;
+    if(ts instanceof Date) return isNaN(ts) ? null : ts;
+    const s = String(ts).trim();
+    const d = /[TZ]/.test(s) ? new Date(s) : new Date(s.replace(" ", "T"));
+    return isNaN(d) ? null : d;
+  }
+  function fmtDate(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  // 신청(수~금)과 응시(토·일)를 한 주차로 묶는다 → 그 주의 수요일을 키로.
+  function weekStartKey(ts){
+    const d = toDate(ts); if(!d) return "";
+    const since = (d.getDay() - 3 + 7) % 7;  // 수요일(3)로부터 지난 날 수
+    return fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()-since));
+  }
+  // 주차 라벨: 그 주 토~일이 실제 응시일
+  function weekLabel(key){
+    const p = key.split("-"); const wed = new Date(+p[0], +p[1]-1, +p[2]);
+    const sat = new Date(wed.getFullYear(), wed.getMonth(), wed.getDate()+3);
+    const sun = new Date(wed.getFullYear(), wed.getMonth(), wed.getDate()+4);
+    const md = x => (x.getMonth()+1)+"/"+x.getDate();
+    return md(sat)+"·"+md(sun)+" 모의고사";
+  }
+  function dayDateLabel(key, day){
+    const p = key.split("-"); const wed = new Date(+p[0], +p[1]-1, +p[2]);
+    const off = day==="토요일" ? 3 : 4;
+    const x = new Date(wed.getFullYear(), wed.getMonth(), wed.getDate()+off);
+    return (x.getMonth()+1)+"월 "+x.getDate()+"일";
+  }
+
+  let allRows = [];
+  let authed = false;
+  let teacherPw = "";
+  let signupOpen = true;
+  let weekInitialized = false;
+  let weekList = []; // 최근 주가 먼저 (내림차순)
+
+  const $ = id => document.getElementById(id);
+  function setState(msg, isErr){
+    const s = $("state");
+    s.style.display = msg ? "block" : "none";
+    s.textContent = msg || "";
+    s.className = "state" + (isErr ? " err" : "");
+    $("dashboard").style.display = msg ? "none" : "block";
+  }
+  function showGate(errMsg){
+    authed = false;
+    $("gate").style.display = "block";
+    $("topbar").style.display = "none";
+    $("state").style.display = "none";
+    $("dashboard").style.display = "none";
+    $("gate-err").textContent = errMsg || "";
+    $("enter").disabled = false; $("enter").textContent = "확인";
+    $("pw").focus(); $("pw").select();
+  }
+  function enterApp(){
+    authed = true;
+    $("gate").style.display = "none";
+    $("topbar").style.display = "flex";
+    setupSignupLink();
+  }
+
+  // 신청 링크: 이 페이지 주소에서 파일명만 signup.html 로 바꿜다.
+  function setupSignupLink(){
+    let url;
+    try { url = new URL("signup.html", location.href).href; }
+    catch(e){ url = "signup.html"; }
+    $("signup-link").value = url;
+  }
+  $("copy-link").addEventListener("click", () => {
+    const input = $("signup-link");
+    const text = input.value;
+    const done = () => { $("copied-msg").textContent = "복사됐어요!"; setTimeout(()=>$("copied-msg").textContent="", 2000); };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done).catch(()=>{ input.select(); document.execCommand("copy"); done(); });
+    } else {
+      input.select(); document.execCommand("copy"); done();
+    }
+  });
+
+  function fetchData(){
+    if (authed){ setState("신청 현황을 불러오는 중…", false); $("refresh").disabled = true; }
+    const cb = "shuegukCb" + Date.now();
+    const script = document.createElement("script");
+    window[cb] = function(resp){
+      window[cb] = undefined;
+      if (script.parentNode) script.parentNode.removeChild(script);
+      $("refresh").disabled = false;
+      if (!resp || resp.result !== "success"){
+        if (resp && resp.message === "unauthorized"){ showGate("비밀번호가 올바르지 않습니다."); }
+        else if (authed){ setState("데이터를 불러오지 못했어요. 웹앱 주소를 확인해 주세요.", true); }
+        else { showGate("데이터를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."); }
+        return;
+      }
+      if (!authed) enterApp();
+      if (typeof resp.open !== "undefined") signupOpen = !!resp.open;
+      if (resp.cap) DAY_CAP = resp.cap;
+      renderOpenState();
+      allRows = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
+      $("updated").textContent = "업데이트 " + new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
+      setState("", false);
+      buildFilters();
+      render();
+    };
+    script.onerror = function(){
+      if (script.parentNode) script.parentNode.removeChild(script);
+      $("refresh").disabled = false;
+      if (authed) setState("데이터를 불러오지 못했어요. 인터넷 연결과 웹앱 주소를 확인해 주세요.", true);
+      else showGate("연결에 실패했어요. 인터넷 연결을 확인해 주세요.");
+    };
+    script.src = DATA_URL + "?action=data"
+               + "&pw=" + encodeURIComponent(teacherPw)
+               + "&callback=" + cb + "&t=" + Date.now();
+    document.body.appendChild(script);
+  }
+
+  function studentKey(r){ return (r["이름"]||"") + "|" + (r["학교"]||"") + "|" + (r["학생ID"]||""); }
+
+  function buildFilters(){
+    weekList = uniq(allRows.map(r=>weekStartKey(r["제출시각"]))).sort().reverse();
+    fillSelectKV("f-week", "전체 주차", weekList.map(w=>({value:w, label:weekLabel(w)})));
+    if (!weekInitialized && weekList.length){ $("f-week").value = weekList[0]; weekInitialized = true; }
+    fillSelect("f-school", "전체 학교", uniq(allRows.map(r=>r["학교"])));
+  }
+  function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
+  function fillSelect(id, allLabel, opts){
+    const sel = $(id), cur = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>` + opts.map(o=>`<option>${esc(o)}</option>`).join("");
+    if (opts.includes(cur)) sel.value = cur;
+  }
+  function fillSelectKV(id, allLabel, opts){
+    const sel = $(id), cur = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>` + opts.map(o=>`<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("");
+    if (opts.some(o=>o.value===cur)) sel.value = cur;
+  }
+
+  // 검색·학년·과목·학교 필터만 적용 (요일 통계는 주차 단위로 따로 계산)
+  function currentFiltered(){
+    const q = $("q").value.trim();
+    const fw = $("f-week").value;
+    const fd = $("f-day").value, fg = $("f-grade").value, fs = $("f-subject").value, fsc = $("f-school").value;
+    return allRows.filter(r =>
+      (!q || (r["이름"]||"").includes(q) || (r["학교"]||"").includes(q)) &&
+      (!fw || weekStartKey(r["제출시각"]) === fw) &&
+      (!fd || String(r["응시요일"]) === fd) &&
+      (!fg || String(r["학년"]) === fg) &&
+      (!fs || String(r["선택과목"]) === fs) &&
+      (!fsc || r["학교"] === fsc)
+    );
+  }
+  // 요일 정원 통계는 검색/학년/과목/학교 필터와 무관하게 '선택 주차'의 전체 신청 기준
+  function weekRows(){
+    const fw = $("f-week").value;
+    return allRows.filter(r => !fw || weekStartKey(r["제출시각"]) === fw);
+  }
+
+  function render(){
+    const rows = currentFiltered();
+    updateWeekNav();
+
+    // 요일별 정원 통계 (선택 주차 전체)
+    const wr = weekRows();
+    const fw = $("f-week").value;
+    ["토요일","일요일"].forEach(day => {
+      const key = day === "토요일" ? "sat" : "sun";
+      const students = new Set(wr.filter(r=>String(r["응시요일"])===day).map(studentKey));
+      const n = students.size;
+      $("s-"+key).textContent = n;
+      $("s-cap-"+key).textContent = DAY_CAP;
+      const pct = Math.min(100, Math.round(n/DAY_CAP*100));
+      $("s-"+key+"-bar").style.width = pct + "%";
+      $("s-"+key+"-date").innerHTML = fw ? dayDateLabel(fw, day) + (n>=DAY_CAP ? ' <span class="full">· 마감</span>' : '') : "";
+    });
+
+    // 신청 학생 수 / 최근 신청 (현재 필터 기준)
+    $("s-students").textContent = new Set(rows.map(studentKey)).size;
+    const latest = rows.slice().sort((a,b)=> String(b["제출시각"]).localeCompare(String(a["제출시각"])))[0];
+    $("s-latest").textContent = latest ? shortTime(latest["제출시각"]) : "–";
+    $("s-latest-who").textContent = latest ? (latest["이름"]+" · "+latest["학교"]) : "";
+
+    $("count-label").textContent = `신청 ${rows.length}건 · 학생 ${new Set(rows.map(studentKey)).size}명`;
+    if (rows.length === 0){ $("list").innerHTML = `<div class="table-card"><div class="empty">조건에 맞는 신청이 없어요.</div></div>`; return; }
+    renderTable(rows);
+  }
+
+  function renderTable(rows){
+    rows = rows.slice().sort((a,b)=> String(b["제출시각"]).localeCompare(String(a["제출시각"])));
+    const body = rows.map(r=>{
+      const day = String(r["응시요일"]||"");
+      const cls = DAY_CLASS[day] || "sat";
+      return `<tr>
+        <td class="when">${esc(shortTime(r["제출시각"]))}</td>
+        <td class="nm">${esc(r["이름"])}</td>
+        <td>${esc(r["학교"])}</td>
+        <td>${esc(r["학년"])}</td>
+        <td class="id">${esc(r["학생ID"])}</td>
+        <td>${esc(r["선택과목"])}</td>
+        <td><span class="tag ${cls}">${esc(day)}</span></td>
+        <td>${esc(r["응시일자"])}</td>
+      </tr>`;
+    }).join("");
+    $("list").innerHTML = `<div class="table-card"><div class="tbl-scroll"><table>
+      <thead><tr><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th></tr></thead>
+      <tbody>${body}</tbody></table></div></div>`;
+  }
+
+  function shortTime(ts){
+    const d = toDate(ts); if(!d) return String(ts||"");
+    const p = n => String(n).padStart(2,"0");
+    return (d.getMonth()+1)+"/"+d.getDate()+" "+p(d.getHours())+":"+p(d.getMinutes());
+  }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+  // 주차 내비게이션
+  function updateWeekNav(){
+    const v = $("f-week").value;
+    const has = weekList.length > 0;
+    const idx = weekList.indexOf(v);
+    $("week-next").disabled = !has || idx === 0;
+    $("week-prev").disabled = !has || idx === weekList.length-1;
+    if (v === "" && has){ $("week-next").disabled = false; $("week-prev").disabled = false; }
+    $("week-hint").textContent = (v === "" && has) ? "모든 주차 합산" : "";
+  }
+  function moveWeek(delta){
+    if (!weekList.length) return;
+    let idx = weekList.indexOf($("f-week").value);
+    idx = (idx === -1) ? 0 : idx + delta;
+    idx = Math.max(0, Math.min(weekList.length-1, idx));
+    $("f-week").value = weekList[idx];
+    render();
+  }
+
+  ["q","f-week","f-day","f-grade","f-subject","f-school"].forEach(id => $(id).addEventListener("input", render));
+  $("week-prev").addEventListener("click", ()=> moveWeek(+1));
+  $("week-next").addEventListener("click", ()=> moveWeek(-1));
+  $("refresh").addEventListener("click", fetchData);
+
+  // 신청 받기 ON/OFF
+  function renderOpenState(){
+    const btn = $("toggle-open");
+    btn.style.display = "inline-block";
+    if (signupOpen){
+      btn.textContent = "🟢 신청 받는 중";
+      btn.title = "누르면 신청을 중단합니다";
+      btn.classList.add("open"); btn.classList.remove("closed");
+    } else {
+      btn.textContent = "‖ 신청 중단됨";
+      btn.title = "누르면 신청을 다시 받습니다";
+      btn.classList.add("closed"); btn.classList.remove("open");
+    }
+  }
+  function toggleOpen(){
+    const next = !signupOpen;
+    const msg = next
+      ? "지금부터 주말 모의고사 신청을 다시 받을까요?"
+      : "지금부터 신청을 중단할까요?\n학생 신청 화면에서 제출이 막히고, 다시 켜기 전까지 신청을 받지 않아요.";
+    if (!window.confirm(msg)) return;
+
+    const btn = $("toggle-open");
+    const prev = btn.textContent;
+    btn.disabled = true; btn.textContent = "변경 중…";
+
+    const cb = "shuegukSet" + Date.now();
+    const script = document.createElement("script");
+    let settled = false;
+    const finish = () => {
+      if (settled) return true;
+      settled = true; clearTimeout(timer);
+      window[cb] = undefined;
+      if (script.parentNode) script.parentNode.removeChild(script);
+      btn.disabled = false;
+      return false;
+    };
+    const timer = setTimeout(function(){
+      if (finish()) return;
+      btn.textContent = prev;
+      alert("상태 변경에 응답이 없어요.\nApps Script(signup_code.gs)를 새 버전으로 재배포했는지 확인해 주세요.");
+    }, 8000);
+    window[cb] = function(resp){
+      if (finish()) return;
+      if (resp && resp.result === "success"){
+        signupOpen = !!resp.open; renderOpenState();
+      } else {
+        btn.textContent = prev;
+        alert(resp && resp.message === "unauthorized"
+          ? "권한이 없어요. 새로고침 후 다시 로그인해 주세요."
+          : "상태 변경에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      }
+    };
+    script.onerror = function(){
+      if (finish()) return;
+      btn.textContent = prev;
+      alert("상태 변경에 실패했어요. 인터넷 연결을 확인해 주세요.");
+    };
+    script.src = DATA_URL + "?action=setStatus&open=" + (next ? "1" : "0")
+               + "&pw=" + encodeURIComponent(teacherPw)
+               + "&callback=" + cb + "&t=" + Date.now();
+    document.body.appendChild(script);
+  }
+  $("toggle-open").addEventListener("click", toggleOpen);
+
+  function submitPw(){
+    const v = $("pw").value.trim();
+    if (!v){ $("gate-err").textContent = "비밀번호를 입력해 주세요."; return; }
+    teacherPw = v;
+    $("enter").disabled = true; $("enter").textContent = "확인 중…";
+    $("gate-err").textContent = "";
+    fetchData();
+  }
+  $("enter").addEventListener("click", submitPw);
+  $("pw").addEventListener("keydown", e => { if (e.key === "Enter") submitPw(); });
+  $("pw").focus();
+</script>
+</body>
+</html>

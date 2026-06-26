@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>이수경국어 · 주말 실전 모의고사 신청</title>
+<meta name="theme-color" content="#c6d5d2" />
+<link rel="stylesheet" href="fonts.css" />
+<style>
+  :root{
+    --sage:#a9c0b4; --sage-d:#7fa08f;
+    --lav:#b8b0cc; --lav-d:#8d83a8; --lav-bg:#e8e3f0;
+    --ink:#3f3a44; --muted:#8a8590;
+    --line:#e4e0e8; --paper:#f7f6f3; --card:#ffffff;
+    --ok:#1b8a3a; --ok-bg:#e3f2e8; --bad:#d0473f;
+    --shadow:0 2px 10px rgba(63,58,68,.06);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Gowun Dodum',-apple-system,BlinkMacSystemFont,system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    background:var(--paper); color:var(--ink);
+    max-width:480px; margin:0 auto; padding:0 0 40px; line-height:1.5;
+  }
+
+  /* ── 헤더 ── */
+  .brand{
+    background:linear-gradient(135deg,#d8cfe6 0%,#c4d4cc 100%);
+    padding:22px 20px 18px; text-align:center;
+    border-radius:0 0 22px 22px; box-shadow:var(--shadow);
+  }
+  .brand .name{ font-family:'Gowun Batang',serif; font-weight:700; font-size:27px; letter-spacing:3px; color:#473f55; }
+  .brand .sub{ font-family:'Gowun Batang',serif; font-size:14px; color:#5d5568; letter-spacing:4px; margin-top:5px; }
+  .title-bar{
+    background:var(--card); margin:16px 16px 0; padding:13px 18px;
+    border-radius:12px; box-shadow:var(--shadow);
+    font-family:'Gowun Batang',serif; font-size:15px; font-weight:700;
+    border-left:5px solid var(--lav);
+  }
+  .intro{ color:var(--muted); font-size:13.5px; margin:12px 16px 0; line-height:1.7; }
+
+  /* ── 카드 ── */
+  .section{ background:var(--card); margin:16px; padding:18px; border-radius:14px; box-shadow:var(--shadow); }
+  .eyebrow{ margin:0 0 14px; font-size:15px; font-family:'Gowun Batang',serif; font-weight:700;
+    display:flex; align-items:center; gap:8px; }
+  .eyebrow .dot{ width:8px; height:8px; border-radius:50%; background:var(--sage); display:inline-block; }
+
+  label{ display:block; font-size:13px; color:var(--muted); margin:12px 0 5px; }
+  .field{ margin-bottom:4px; }
+  .hint{ font-size:12px; color:var(--muted); margin-top:6px; line-height:1.6; }
+
+  input[type=text], select{
+    width:100%; padding:13px 14px; border:1.5px solid var(--line);
+    border-radius:10px; font-size:16px; font-family:inherit; background:#fafafb;
+    color:var(--ink); transition:border-color .15s;
+  }
+  input[type=text]:focus, select:focus{ outline:none; border-color:var(--lav); background:#fff; }
+  select{
+    -webkit-appearance:none; appearance:none; padding-right:38px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a8590' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center;
+  }
+
+  .row{ display:flex; gap:10px; }
+  .row > *{ flex:1; min-width:0; }
+
+  /* 학년 · 선택과목 토글 버튼 */
+  .choices{ display:flex; gap:10px; }
+  .choices button{
+    flex:1; padding:14px 8px; border:1.5px solid var(--line); background:#fafafb;
+    border-radius:10px; font-size:15px; font-family:inherit; color:var(--muted);
+    cursor:pointer; transition:all .15s; font-weight:700;
+  }
+  .choices button.on{
+    background:var(--lav); border-color:var(--lav); color:#fff;
+    box-shadow:0 3px 8px rgba(141,131,168,.35);
+  }
+
+  .submit-btn{
+    width:calc(100% - 32px); display:block; margin:20px 16px 0; padding:17px; border:none; border-radius:13px;
+    background:var(--lav-d); color:#fff; font-size:17px; font-weight:700;
+    font-family:'Gowun Batang',serif; cursor:pointer; letter-spacing:2px;
+    box-shadow:0 4px 14px rgba(141,131,168,.4); transition:opacity .15s;
+  }
+  .submit-btn:active{ opacity:.85; }
+  .submit-btn:disabled{ background:var(--muted); box-shadow:none; }
+
+  .err-msg{ color:var(--bad); font-size:12.5px; margin-top:5px; display:none; }
+  .field.invalid input, .field.invalid select{ border-color:var(--bad); }
+  .field.invalid .err-msg{ display:block; }
+  .field.invalid .choices button{ border-color:var(--bad); }
+
+  .form-note{ text-align:center; color:var(--muted); font-size:12px; margin:14px 16px 0; }
+
+  /* 완료 화면 */
+  #done{ display:none; text-align:center; padding:60px 30px; }
+  #done .check{
+    width:84px; height:84px; margin:0 auto 22px; border-radius:50%;
+    background:var(--ok-bg); display:flex; align-items:center; justify-content:center;
+    font-size:42px; color:var(--ok);
+  }
+  #done h2{ font-family:'Gowun Batang',serif; margin:0 0 8px; font-size:20px; }
+  #done p{ color:var(--muted); font-size:14px; margin:0 auto; max-width:24em; line-height:1.7; }
+  #done .picked{ margin-top:14px; font-weight:700; color:var(--lav-d); }
+  .reset-btn{
+    margin-top:24px; border:1.5px solid var(--line); background:#fff; color:var(--ink);
+    font-family:'Gowun Batang',serif; font-weight:700; font-size:14px;
+    padding:11px 22px; border-radius:11px; cursor:pointer;
+  }
+
+  /* 신청 중단 안내 */
+  #closed{ display:none; text-align:center; padding:60px 30px; }
+  #closed .pause{
+    width:84px; height:84px; margin:0 auto 22px; border-radius:50%;
+    background:var(--lav-bg); display:flex; align-items:center; justify-content:center;
+    font-size:38px; color:var(--lav-d); font-weight:700;
+  }
+  #closed h2{ font-family:'Gowun Batang',serif; margin:0 0 8px; font-size:20px; }
+  #closed p{ color:var(--muted); font-size:14px; margin:0 auto; max-width:24em; line-height:1.7; }
+
+  @media (max-width:430px){
+    .brand .name{ font-size:24px; }
+    .row{ flex-direction:column; gap:0; }
+    .row > *{ margin-bottom:4px; }
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+
+<div class="brand">
+  <div class="name">이수경국어</div>
+  <div class="sub">Shueguk</div>
+</div>
+<div class="title-bar">주말 실전 모의고사 신청</div>
+<p class="intro">이번 주 토요일 또는 일요일에 등원해 실전 모의고사에 응시할 수 있어요. 아래 내용을 적고 〈신청하기〉까지 꼭 눌러주세요. 요일별 정원이 차면 마감됩니다.</p>
+
+<form id="form" novalidate>
+  <div class="section">
+    <p class="eyebrow"><span class="dot"></span>학생 정보</p>
+
+    <div class="field" id="f-name">
+      <label for="name">이름</label>
+      <input type="text" id="name" autocomplete="name" placeholder="이름" />
+      <p class="err-msg">이름을 입력해 주세요.</p>
+    </div>
+
+    <div class="row">
+      <div class="field" id="f-school">
+        <label for="school">학교</label>
+        <input type="text" id="school" autocomplete="off" placeholder="학교명" />
+        <p class="err-msg">학교를 입력해 주세요.</p>
+      </div>
+      <div class="field" id="f-grade">
+        <label>학년</label>
+        <div class="choices" id="grade">
+          <button type="button" data-val="1">1학년</button>
+          <button type="button" data-val="2">2학년</button>
+          <button type="button" data-val="3">3학년</button>
+        </div>
+        <p class="err-msg">학년을 선택해 주세요.</p>
+      </div>
+    </div>
+
+    <div class="field" id="f-id">
+      <label for="id">학생 ID</label>
+      <input type="text" id="id" inputmode="numeric" maxlength="8" placeholder="예) 12345678" autocomplete="off" />
+      <p class="hint">부모님 전화번호에서 <b>앞 010을 뺀 나머지 숫자</b>를 입력해 주세요. (예: 010-1234-5678 → 12345678)</p>
+      <p class="err-msg">010을 제외한 숫자 7~8자리를 입력해 주세요.</p>
+    </div>
+
+    <div class="field" id="f-subject">
+      <label>선택과목</label>
+      <div class="choices" id="subject">
+        <button type="button" data-val="화법과작문">화법과작문</button>
+        <button type="button" data-val="언어와매체">언어와매체</button>
+      </div>
+      <p class="err-msg">선택과목을 골라 주세요.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <p class="eyebrow"><span class="dot"></span>응시 요일</p>
+    <div class="field" id="f-day">
+      <label for="day">응시할 요일</label>
+      <select id="day">
+        <option value="">선택</option>
+      </select>
+      <p class="hint" id="day-hint">신청한 주의 토요일 또는 일요일에 등원합니다.</p>
+      <p class="err-msg">응시할 요일을 선택해 주세요.</p>
+    </div>
+  </div>
+
+  <button type="submit" class="submit-btn" id="submit">신청하기</button>
+  <p class="form-note">제출하면 신청 시각이 자동으로 기록됩니다.</p>
+</form>
+
+<div id="done">
+  <div class="check">✓</div>
+  <h2>신청이 완료되었어요!</h2>
+  <p>주말 실전 모의고사 신청이 접수되었습니다. 잊지 말고 시간 맞춰 등원해 주세요 :-)</p>
+  <p class="picked" id="done-picked"></p>
+  <button type="button" class="reset-btn" id="reset">새로 신청하기</button>
+</div>
+
+<div id="closed">
+  <div class="pause">‖</div>
+  <h2>지금은 신청을 받고 있지 않아요</h2>
+  <p>주말 모의고사 신청은 매주 수요일에 열리고 금요일 밤 11:59에 닫혀요. 신청 기간에 다시 들러주세요 :-)</p>
+</div>
+
+<script>
+  /* ============================================================
+     ① 아래 SCRIPT_URL 에 Apps Script 웹앱 배포 주소를 붙여넣으세요.
+        (signup_code.gs 배포 후 받는 https://script.google.com/macros/s/.../exec 주소)
+     ============================================================ */
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzdqac0xTnCaOo_t_2swJQqdfxjiA14sTo-ThTV8VvwcwaTucM1MQGeJfMfV4lNLM75/exec";
+
+  let dayCap = 37;
+  let dayCounts = {};
+  let dayDates = {};   // { 토요일:{label,iso}, 일요일:{...} }
+  let dayList = ["토요일", "일요일"];
+
+  function apiReady(){ return SCRIPT_URL && SCRIPT_URL.indexOf("script.google.com") !== -1; }
+
+  // Apps Script 응답을 읽기 위한 JSONP 요청
+  function jsonpRequest(params, onResult, onError){
+    const cb = "shuegukCb" + Date.now() + Math.floor(Math.random()*1000);
+    const script = document.createElement("script");
+    let done = false;
+    const cleanup = () => { window[cb] = undefined; if (script.parentNode) script.parentNode.removeChild(script); };
+    window[cb] = function(resp){ if(done) return; done = true; cleanup(); onResult(resp); };
+    script.onerror = function(){ if(done) return; done = true; cleanup(); if(onError) onError(); };
+    const qs = Object.keys(params).map(k => encodeURIComponent(k)+"="+encodeURIComponent(params[k])).join("&");
+    script.src = SCRIPT_URL + "?" + qs + "&callback=" + cb + "&t=" + Date.now();
+    document.body.appendChild(script);
+  }
+
+  // 버튼 그룹(학년·선택과목) 단일 선택
+  function setupChoices(id){
+    const grp = document.getElementById(id);
+    grp.addEventListener("click", e => {
+      const btn = e.target.closest("button"); if(!btn) return;
+      grp.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === btn));
+      grp.dataset.val = btn.dataset.val;
+      grp.closest(".field").classList.remove("invalid");
+    });
+  }
+  setupChoices("grade");
+  setupChoices("subject");
+
+  // 응시 요일 옵션 만들기 (날짜 표시 + 마감 처리)
+  function buildDayOptions(){
+    const sel = document.getElementById("day");
+    const cur = sel.value;
+    let html = '<option value="">선택</option>';
+    dayList.forEach(d => {
+      const used = dayCounts[d] || 0;
+      const full = used >= dayCap;
+      const date = dayDates[d] && dayDates[d].label ? " (" + dayDates[d].label + ")" : "";
+      const left = full ? " · 마감" : " · 남은자리 " + (dayCap - used) + "명";
+      html += `<option value="${d}"${full ? " disabled" : ""}>${d}${date}${left}</option>`;
+    });
+    sel.innerHTML = html;
+    if (dayList.includes(cur) && (dayCounts[cur] || 0) < dayCap) sel.value = cur;
+  }
+
+  function showClosed(){
+    document.getElementById("form").style.display = "none";
+    document.getElementById("done").style.display = "none";
+    document.getElementById("closed").style.display = "block";
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function loadDays(){
+    if (!apiReady()){
+      // 주소 미입력(로컬 데모): 임시 날짜
+      dayDates = { "토요일":{label:"토요일"}, "일요일":{label:"일요일"} };
+      buildDayOptions();
+      return;
+    }
+    jsonpRequest({ action: "days" }, function(resp){
+      if (!resp || resp.result !== "success") return;
+      if (resp.open === false){ showClosed(); return; }
+      dayCap = resp.cap || 37;
+      dayCounts = resp.counts || {};
+      dayDates = resp.dates || {};
+      if (Array.isArray(resp.days) && resp.days.length) dayList = resp.days;
+      buildDayOptions();
+    });
+  }
+  loadDays();
+
+  document.getElementById("day").addEventListener("change", () => {
+    document.getElementById("f-day").classList.remove("invalid");
+    document.getElementById("f-day").querySelector(".err-msg").textContent = "응시할 요일을 선택해 주세요.";
+  });
+
+  function markInvalid(fieldId, bad){ document.getElementById(fieldId).classList.toggle("invalid", bad); }
+
+  document.getElementById("form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    let ok = true;
+
+    const name = document.getElementById("name").value.trim();
+    markInvalid("f-name", !name); if(!name) ok = false;
+
+    const school = document.getElementById("school").value.trim();
+    markInvalid("f-school", !school); if(!school) ok = false;
+
+    const grade = document.getElementById("grade").dataset.val || "";
+    markInvalid("f-grade", !grade); if(!grade) ok = false;
+
+    const id = document.getElementById("id").value.trim();
+    const idOk = /^\d{7,8}$/.test(id);
+    markInvalid("f-id", !idOk); if(!idOk) ok = false;
+
+    const subject = document.getElementById("subject").dataset.val || "";
+    markInvalid("f-subject", !subject); if(!subject) ok = false;
+
+    const day = document.getElementById("day").value;
+    markInvalid("f-day", !day); if(!day) ok = false;
+
+    if(!ok){
+      const firstBad = document.querySelector(".field.invalid");
+      if(firstBad) firstBad.scrollIntoView({behavior:"smooth", block:"center"});
+      return;
+    }
+
+    const btn = document.getElementById("submit");
+    btn.disabled = true; btn.textContent = "보내는 중…";
+
+    const finishOk = () => {
+      document.getElementById("done-picked").textContent =
+        name + " · " + school + " " + grade + "학년 · " + subject + " · " + day +
+        (dayDates[day] && dayDates[day].label ? " (" + dayDates[day].label + ")" : "") + " 응시";
+      document.getElementById("form").style.display = "none";
+      document.getElementById("done").style.display = "block";
+      window.scrollTo({top:0, behavior:"smooth"});
+    };
+
+    if (!apiReady()){
+      // 로컬 데모: 서버 없이 완료 화면만
+      setTimeout(finishOk, 500);
+      return;
+    }
+
+    jsonpRequest({
+      action: "submit", name, school, grade, id, subject, day
+    }, function(resp){
+      if (resp && resp.result === "success"){
+        finishOk();
+      } else if (resp && resp.result === "full"){
+        btn.disabled = false; btn.textContent = "신청하기";
+        dayCounts[resp.day] = resp.cap || dayCap;
+        buildDayOptions();
+        const f = document.getElementById("f-day");
+        f.querySelector(".err-msg").textContent = "선택하신 요일은 정원이 찼어요. 다른 요일을 선택해 주세요.";
+        f.classList.add("invalid");
+        f.scrollIntoView({behavior:"smooth", block:"center"});
+      } else if (resp && resp.result === "closed"){
+        showClosed();
+      } else {
+        btn.disabled = false; btn.textContent = "신청하기";
+        alert("전송에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
+      }
+    }, function(){
+      btn.disabled = false; btn.textContent = "신청하기";
+      alert("전송에 문제가 생겼어요. 인터넷 연결을 확인하고 다시 시도해 주세요.");
+    });
+  });
+
+  document.getElementById("reset").addEventListener("click", () => location.reload());
+</script>
+</body>
+</html>
