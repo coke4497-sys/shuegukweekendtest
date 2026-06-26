@@ -38,11 +38,12 @@
     font-family:'Gowun Batang',serif; font-weight:700; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer; }
   .refresh:hover{ background:rgba(255,255,255,.85); }
   .refresh:disabled{ opacity:.5; cursor:default; }
-  .home-btn{ border:none; background:rgba(255,255,255,.6); color:#473f55;
-    font-family:'Gowun Batang',serif; font-weight:700; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer;
-    text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
-  .home-btn:hover{ background:rgba(255,255,255,.85); }
-  .home-btn svg{ width:15px; height:15px; }
+  .back{ display:inline-flex; align-items:center; gap:6px; color:var(--muted);
+    text-decoration:none; font-size:14px; }
+  .back:hover{ color:var(--lav-d); }
+  .back svg{ width:16px; height:16px; }
+  .topback{ margin:16px 16px 0; }
+  .gateback{ margin-top:18px; }
   .toggle-open{ border:none; background:rgba(255,255,255,.6);
     font-family:'Gowun Batang',serif; font-weight:700; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer; color:#473f55; }
   .toggle-open.open{ color:var(--sage-d); }
@@ -142,10 +143,6 @@
   .gate button:active{ opacity:.85; }
   .gate button:disabled{ opacity:.6; cursor:default; }
   .gate .ge{ color:var(--bad); font-size:12.5px; font-weight:700; margin-top:12px; min-height:1.1em; }
-  .gate-home{ display:inline-flex; align-items:center; gap:5px; margin-top:18px; color:var(--lav-d);
-    text-decoration:none; font-family:'Gowun Batang',serif; font-weight:700; font-size:13px; }
-  .gate-home:hover{ color:var(--ink); }
-  .gate-home svg{ width:15px; height:15px; }
 
   @media (max-width:600px){ .stats{ grid-template-columns:repeat(2,1fr); } }
   @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
@@ -160,9 +157,9 @@
     <input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password" />
     <button id="enter">확인</button>
     <div class="ge" id="gate-err"></div>
-    <a class="gate-home" href="https://coke4497-sys.github.io/shueguk-hub/index.html">
+    <a class="back gateback" href="https://coke4497-sys.github.io/shueguk-hub/index.html">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
-      티쳐스 메인으로
+      티쳐스 메인 페이지로 가기
     </a>
   </div>
 </div>
@@ -173,10 +170,6 @@
     <div class="sub">Shueguk · 신청 관리</div>
   </div>
   <div class="head-actions">
-    <a class="home-btn" href="https://coke4497-sys.github.io/shueguk-hub/index.html">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
-      티쳐스 메인
-    </a>
     <span class="updated" id="updated"></span>
     <button class="toggle-open" id="toggle-open" style="display:none;"></button>
     <button class="refresh" id="refresh">새로고침</button>
@@ -186,6 +179,10 @@
 <div class="state" id="state" style="display:none;">신청 현황을 불러오는 중…</div>
 
 <main id="dashboard">
+  <a class="back topback" href="https://coke4497-sys.github.io/shueguk-hub/index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+    티쳐스 메인 페이지로 가기
+  </a>
   <div class="title-bar">주말 실전 모의고사 신청 현황</div>
 
   <div class="linkbar">
