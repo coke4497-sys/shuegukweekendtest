@@ -153,11 +153,7 @@
       </div>
       <div class="field" id="f-grade">
         <label>학년</label>
-        <div class="choices" id="grade">
-          <button type="button" data-val="1">1학년</button>
-          <button type="button" data-val="2">2학년</button>
-          <button type="button" data-val="3">3학년</button>
-        </div>
+        <div class="choices" id="grade"></div>
         <p class="err-msg">학년을 선택해 주세요.</p>
       </div>
     </div>
@@ -249,6 +245,29 @@
   setupChoices("grade");
   setupChoices("subject");
 
+  // 신청 가능 학년 버튼을 동적으로 생성 (기본: 고3만. 서버 설정으로 고1·고2 추가 가능)
+  var GRADE_LABEL = { "1":"1학년", "2":"2학년", "3":"3학년" };
+  function buildGradeChoices(grades){
+    grades = (grades && grades.length) ? grades : ["3"];
+    var g = document.getElementById("grade");
+    var prev = g.dataset.val || "";
+    g.innerHTML = grades.map(function(v){
+      return '<button type="button" data-val="'+v+'">'+(GRADE_LABEL[v]||v+"학년")+'</button>';
+    }).join("");
+    if (grades.length === 1){
+      // 한 학년만 열려 있으면 자동 선택
+      var only = g.querySelector("button");
+      only.classList.add("on"); g.dataset.val = grades[0];
+    } else if (prev && grades.indexOf(prev) > -1){
+      var keep = g.querySelector('button[data-val="'+prev+'"]');
+      if (keep){ keep.classList.add("on"); g.dataset.val = prev; }
+      else g.dataset.val = "";
+    } else {
+      g.dataset.val = "";
+    }
+  }
+  buildGradeChoices(["3"]);   // 서버 응답 전 기본값
+
   // 응시 요일 옵션 만들기 (날짜 표시 + 마감 처리)
   function buildDayOptions(){
     const sel = document.getElementById("day");
@@ -277,6 +296,7 @@
       // 주소 미입력(로컬 데모): 임시 날짜
       dayDates = { "토요일":{label:"토요일"}, "일요일":{label:"일요일"} };
       buildDayOptions();
+      buildGradeChoices(["3"]);
       return;
     }
     jsonpRequest({ action: "days" }, function(resp){
@@ -287,6 +307,7 @@
       dayDates = resp.dates || {};
       if (Array.isArray(resp.days) && resp.days.length) dayList = resp.days;
       buildDayOptions();
+      buildGradeChoices(resp.grades && resp.grades.length ? resp.grades : ["3"]);
     });
   }
   loadDays();
