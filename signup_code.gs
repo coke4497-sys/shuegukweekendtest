@@ -300,7 +300,10 @@ function reply_(callback, obj) {
 }
 
 function getSheet_() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  // SHEET_ID 가 실제 ID로 채워져 있으면 그 시트를, 아니면(기본) 이 스크립트가
+  // 붙어 있는 시트를 사용한다. → placeholder 그대로 둬도 동작(복붙 안전).
+  var hasId = (typeof SHEET_ID === "string" && SHEET_ID.length > 20 && SHEET_ID.indexOf("여기에") === -1);
+  var ss = hasId ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
