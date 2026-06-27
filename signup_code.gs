@@ -63,6 +63,26 @@ function setOpen_(open) {
   PropertiesService.getScriptProperties().setProperty(OPEN_KEY, open ? "1" : "0");
 }
 
+// ── 신청 가능 학년 (기본: 고3만, 주차에 따라 고1·고2 추가) ──────────
+var GRADES_KEY = "weekendGrades";
+var ALL_GRADES = ["1", "2", "3"];   // 1=고1, 2=고2, 3=고3
+var DEFAULT_GRADES = ["3"];          // 기본값: 고3만
+function getActiveGrades_() {
+  var v = PropertiesService.getScriptProperties().getProperty(GRADES_KEY);
+  if (!v) return DEFAULT_GRADES.slice();
+  try {
+    var arr = JSON.parse(v);
+    var filtered = ALL_GRADES.filter(function (g) { return arr.indexOf(g) > -1; });
+    return filtered.length ? filtered : DEFAULT_GRADES.slice();
+  } catch (e) { return DEFAULT_GRADES.slice(); }
+}
+function setActiveGrades_(arr) {
+  var clean = ALL_GRADES.filter(function (g) { return (arr || []).indexOf(g) > -1; });
+  if (!clean.length) clean = DEFAULT_GRADES.slice();
+  PropertiesService.getScriptProperties().setProperty(GRADES_KEY, JSON.stringify(clean));
+  return clean;
+}
+
 // 학생 식별 키 (이름 + 학교 + 학생ID)
 function studentKey_(name, school, id) {
   return (name || "") + "|" + (school || "") + "|" + (id || "");
@@ -81,6 +101,10 @@ function handleSubmit_(data) {
     var day = data.day || "";
     if (DAYS.indexOf(day) === -1) {
       return { result: "error", message: "invalid_day" };
+    }
+    // 신청 가능 학년 확인 (닫힌 학년이면 거부)
+    if (getActiveGrades_().indexOf(String(data.grade || "")) === -1) {
+      return { result: "grade_closed" };
     }
 
     var sheet = getSheet_();
@@ -204,7 +228,8 @@ function doGet(e) {
     DAYS.forEach(function (d) { dates[d] = { label: examDateLabel_(week, d), iso: examDateISO_(week, d) }; });
     return reply_(params.callback, {
       result: "success", cap: DAY_CAP, days: DAYS,
-      counts: dayCounts_(), open: isOpen_(), dates: dates, week: week
+      counts: dayCounts_(), open: isOpen_(), dates: dates, week: week,
+      grades: getActiveGrades_()
     });
   }
 
@@ -221,6 +246,16 @@ function doGet(e) {
     var open = (params.open === "1" || params.open === "true");
     setOpen_(open);
     return reply_(params.callback, { result: "success", open: open });
+  }
+
+  // 신청 가능 학년 설정 (교사 전용)
+  if (params.action === "setGrades") {
+    if (params.pw !== TEACHER_PASSWORD) {
+      return reply_(params.callback, { result: "error", message: "unauthorized" });
+    }
+    var gsel = [];
+    try { gsel = params.grades ? JSON.parse(params.grades) : []; } catch (e) { gsel = []; }
+    return reply_(params.callback, { result: "success", grades: setActiveGrades_(gsel) });
   }
 
   // 폼: 신청 처리 (응답을 읽어 마감 여부를 알려주기 위해 GET/JSONP 사용)
@@ -245,7 +280,7 @@ function doGet(e) {
       headers.forEach(function (h, i) { o[h] = r[i]; });
       return o;
     });
-    return reply_(params.callback, { result: "success", rows: rows, open: isOpen_(), cap: DAY_CAP, days: DAYS });
+    return reply_(params.callback, { result: "success", rows: rows, open: isOpen_(), cap: DAY_CAP, days: DAYS, grades: getActiveGrades_() });
   }
 
   return ContentService.createTextOutput("이수경국어 주말 모의고사 신청 엔드포인트가 작동 중입니다.");

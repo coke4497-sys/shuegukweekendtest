@@ -71,6 +71,14 @@
   .linkrow button:active{ opacity:.85; }
   .linkrow .copied{ color:var(--sage-d); font-weight:700; font-size:12.5px; }
 
+  /* 신청 가능 학년 설정 */
+  .gradebar{ background:var(--card); border-radius:14px; box-shadow:var(--shadow); padding:14px 18px; margin:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .gradebar .gb-label{ font-family:'Gowun Batang',serif; font-weight:700; font-size:14px; color:var(--ink); }
+  .gradebar .gb-btns{ display:flex; gap:8px; }
+  .gradebar .gb-btns button{ border:1.5px solid var(--line); background:#fafafb; color:var(--muted); font-family:'Gowun Batang',serif; font-weight:700; font-size:14px; padding:8px 16px; border-radius:20px; cursor:pointer; }
+  .gradebar .gb-btns button.on{ background:var(--lav); border-color:var(--lav); color:#fff; }
+  .gradebar .gb-msg{ font-size:12.5px; color:var(--sage-d); font-weight:700; min-width:1px; }
+
   /* 주차 선택 */
   .weekbar{ display:flex; align-items:center; gap:8px; margin:16px; }
   .weekbar select{ flex:none; min-width:180px; font-family:'Gowun Batang',serif; font-size:14.5px; font-weight:700; color:#4a4356;
@@ -184,6 +192,16 @@
     주말 실전 모의고사로 가기
   </a>
   <div class="title-bar">주말 실전 모의고사 신청 현황</div>
+
+  <div class="gradebar">
+    <span class="gb-label">신청 가능 학년</span>
+    <div class="gb-btns" id="gradeBtns">
+      <button type="button" data-g="1">고1</button>
+      <button type="button" data-g="2">고2</button>
+      <button type="button" data-g="3">고3</button>
+    </div>
+    <span class="gb-msg" id="gradeMsg"></span>
+  </div>
 
   <div class="linkbar">
     <h2>학생 신청 링크</h2>
@@ -335,6 +353,7 @@
       if (typeof resp.open !== "undefined") signupOpen = !!resp.open;
       if (resp.cap) DAY_CAP = resp.cap;
       renderOpenState();
+      if (resp.grades) setGradeUI(resp.grades);
       allRows = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
       $("updated").textContent = "업데이트 " + new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
       setState("", false);
@@ -537,6 +556,46 @@
     document.body.appendChild(script);
   }
   $("toggle-open").addEventListener("click", toggleOpen);
+
+  // 신청 가능 학년 설정 (기본 고3, 고1·고2 추가 가능)
+  var GRADE_ORDER = ["1","2","3"];
+  function setGradeUI(grades){
+    grades = (grades && grades.length) ? grades : ["3"];
+    GRADE_ORDER.forEach(function(g){
+      var b = document.querySelector('#gradeBtns button[data-g="'+g+'"]');
+      if (b) b.classList.toggle("on", grades.indexOf(g) > -1);
+    });
+  }
+  function currentGrades(){
+    return GRADE_ORDER.filter(function(g){
+      var b = document.querySelector('#gradeBtns button[data-g="'+g+'"]');
+      return b && b.classList.contains("on");
+    });
+  }
+  document.getElementById("gradeBtns").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if(!b) return;
+    b.classList.toggle("on");
+    var sel = currentGrades();
+    if (!sel.length){ b.classList.add("on"); return; }   // 최소 한 학년은 유지
+    sendGrades(sel);
+  });
+  function sendGrades(sel){
+    var msg = $("gradeMsg"); msg.textContent = "저장 중…";
+    var cb = "shuegukGr" + Date.now();
+    var script = document.createElement("script");
+    var settled = false;
+    var finish = function(){ if(settled) return true; settled=true; clearTimeout(timer); window[cb]=undefined; if(script.parentNode) script.parentNode.removeChild(script); return false; };
+    var timer = setTimeout(function(){ if(finish()) return; msg.textContent="응답 없음 — 재배포 확인"; }, 8000);
+    window[cb] = function(resp){
+      if(finish()) return;
+      if(resp && resp.result==="success"){ setGradeUI(resp.grades); msg.textContent="저장됨 ✓"; setTimeout(function(){ msg.textContent=""; }, 1500); }
+      else { msg.textContent = (resp && resp.message==="unauthorized") ? "권한 없음" : "저장 실패"; }
+    };
+    script.onerror = function(){ if(finish()) return; msg.textContent="저장 실패 — 인터넷 확인"; };
+    script.src = DATA_URL + "?action=setGrades&grades=" + encodeURIComponent(JSON.stringify(sel))
+               + "&pw=" + encodeURIComponent(teacherPw) + "&callback=" + cb + "&t=" + Date.now();
+    document.body.appendChild(script);
+  }
 
   function submitPw(){
     const v = $("pw").value.trim();
