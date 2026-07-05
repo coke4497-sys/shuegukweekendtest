@@ -39,6 +39,39 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);  // ← iframe 허용(파란 띠 제거용)
 }
 
+// ───────── 출제 저장 (answer_key.html '시트에 바로 저장' 버튼) ─────────
+// payload: { action:'saveExam', pw, name(회차 이름), json(회차 데이터 문자열) }
+// '회차정답' 탭에 A:이름 B:JSON 으로 기록. 같은 이름이 있으면 덮어쓰기(수정).
+function doPost(e) {
+  let out;
+  try {
+    const data = JSON.parse(e.postData.contents);
+    if (data.action === 'saveExam') out = saveExam_(data);
+    else out = { result: 'error', message: 'unknown action' };
+  } catch (err) {
+    out = { result: 'error', message: String(err) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+function saveExam_(data) {
+  if (String(data.pw || '') !== 'sh') return { result: 'error', message: 'unauthorized' };
+  const name = String(data.name || '').trim();
+  const jsonStr = String(data.json || '').trim();
+  if (!name) return { result: 'error', message: '회차 이름이 비어 있습니다.' };
+  JSON.parse(jsonStr);   // 형식 검증 — 깨진 데이터가 저장되는 것 방지
+  let sh = SS().getSheetByName('회차정답');
+  if (!sh) sh = SS().insertSheet('회차정답');
+  const rows = sh.getDataRange().getValues();
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === name) {
+      sh.getRange(i + 1, 2).setValue(jsonStr);
+      return { result: 'success', updated: true };
+    }
+  }
+  sh.appendRow([name, jsonStr]);
+  return { result: 'success', updated: false };
+}
+
 // ───────── 외부 페이지용 JSON/JSONP API ─────────
 // callback 이 있으면 JSONP(자바스크립트), 없으면 일반 JSON 으로 응답.
 function apiResponse_(p) {
