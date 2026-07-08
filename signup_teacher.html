@@ -457,6 +457,16 @@
     return cnt;
   }
 
+  // 응시일 표시: 시트 값이 날짜(긴 ISO 시각 문자열)로 변해 있어도 항상 'M월 D일'로.
+  // 제출시각의 주차 + 응시요일에서 계산하고, 안 되면 시트 값을 날짜로 해석해 표시.
+  function examDayLabel(r){
+    const wk = weekStartKey(r["제출시각"]);
+    const day = String(r["응시요일"]||"");
+    if (wk && (day === "토요일" || day === "일요일")) return dayDateLabel(wk, day);
+    const d = toDate(r["응시일자"]);
+    return d ? (d.getMonth()+1)+"월 "+d.getDate()+"일" : String(r["응시일자"]||"");
+  }
+
   function renderTable(rows){
     rows = rows.slice().sort((a,b)=> String(b["제출시각"]).localeCompare(String(a["제출시각"])));
     const dups = dupCounts();
@@ -465,7 +475,8 @@
       const cls = DAY_CLASS[day] || "sat";
       const dkey = weekStartKey(r["제출시각"]) + "|" + String(r["이름"]||"").trim() + "|" + String(r["학교"]||"").trim();
       const dup = dups[dkey] > 1 ? ' <span class="tag dup">중복</span>' : '';
-      const info = (r["이름"]||"") + " · " + (r["학교"]||"") + " · " + day + (r["응시일자"] ? " ("+r["응시일자"]+")" : "");
+      const dateLabel = examDayLabel(r);
+      const info = (r["이름"]||"") + " · " + (r["학교"]||"") + " · " + day + (dateLabel ? " ("+dateLabel+")" : "");
       return `<tr>
         <td class="when">${esc(shortTime(r["제출시각"]))}</td>
         <td class="nm">${esc(r["이름"])}${dup}</td>
@@ -474,7 +485,7 @@
         <td class="id">${esc(r["학생ID"])}</td>
         <td>${esc(r["선택과목"])}</td>
         <td><span class="tag ${cls}">${esc(day)}</span></td>
-        <td>${esc(r["응시일자"])}</td>
+        <td>${esc(dateLabel)}</td>
         <td class="del"><button class="del-btn" data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}" data-info="${esc(info)}">삭제</button></td>
       </tr>`;
     }).join("");
