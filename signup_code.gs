@@ -134,7 +134,7 @@ function handleSubmit_(data) {
       "'" + (data.id || ""),     // 앞자리 0 보존을 위해 텍스트로 저장
       data.subject || "",
       day,
-      examDateLabel_(nowWeek, day) // 해당 주차의 실제 응시 날짜 (M월 D일)
+      "'" + examDateLabel_(nowWeek, day) // 'M월 D일' — 시트가 날짜+시간으로 자동 변환하지 않게 텍스트로 저장
     ];
 
     sheet.getRange(sheet.getLastRow() + 1, 1, 1, HEADERS.length).setValues([row]);
