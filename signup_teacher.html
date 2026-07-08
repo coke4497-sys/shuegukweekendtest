@@ -345,7 +345,18 @@
     if (authed){ setState("신청 현황을 불러오는 중…", false); $("refresh").disabled = true; }
     const cb = "shuegukCb" + Date.now();
     const script = document.createElement("script");
+    let settled = false;
+    // 서버가 오래 응답이 없으면 '확인 중…'에 무한정 걸려 있지 않게 안내
+    const slowTimer = setTimeout(function(){
+      if (settled) return; settled = true;
+      window[cb] = undefined;
+      if (script.parentNode) script.parentNode.removeChild(script);
+      $("refresh").disabled = false;
+      if (authed) setState("서버 응답이 느려요. 잠시 후 '새로고침'을 다시 눌러 주세요.", true);
+      else showGate("서버 응답이 느려요. 잠시 후 다시 시도해 주세요.");
+    }, 20000);
     window[cb] = function(resp){
+      if (settled) return; settled = true; clearTimeout(slowTimer);
       window[cb] = undefined;
       if (script.parentNode) script.parentNode.removeChild(script);
       $("refresh").disabled = false;
@@ -367,6 +378,7 @@
       render();
     };
     script.onerror = function(){
+      if (settled) return; settled = true; clearTimeout(slowTimer);
       if (script.parentNode) script.parentNode.removeChild(script);
       $("refresh").disabled = false;
       if (authed) setState("데이터를 불러오지 못했어요. 인터넷 연결과 웹앱 주소를 확인해 주세요.", true);
