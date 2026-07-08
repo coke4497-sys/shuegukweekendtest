@@ -135,6 +135,12 @@
   .tag{ display:inline-block; font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; }
   .tag.sat{ background:rgba(127,160,143,.16); color:var(--sage-d); }
   .tag.sun{ background:rgba(141,131,168,.16); color:var(--lav-d); }
+  .tag.dup{ background:#fcebea; color:var(--bad); margin-left:6px; padding:2px 8px; }
+  td.del{ text-align:center; }
+  .del-btn{ border:1.5px solid var(--line); background:#fff; color:var(--bad); font-family:inherit;
+    font-size:12px; font-weight:700; padding:5px 11px; border-radius:8px; cursor:pointer; }
+  .del-btn:hover{ background:#fcebea; border-color:#e8b6b2; }
+  .del-btn:disabled{ opacity:.5; cursor:default; }
   .empty{ padding:40px; text-align:center; color:var(--muted); }
 
   /* 비밀번호 게이트 */
@@ -441,25 +447,89 @@
     renderTable(rows);
   }
 
+  // 같은 주차에 같은 학생(이름+학교)이 2건 이상 신청했으면 '중복' 표시용 카운트
+  function dupCounts(){
+    const cnt = {};
+    allRows.forEach(r=>{
+      const k = weekStartKey(r["제출시각"]) + "|" + String(r["이름"]||"").trim() + "|" + String(r["학교"]||"").trim();
+      cnt[k] = (cnt[k]||0) + 1;
+    });
+    return cnt;
+  }
+
   function renderTable(rows){
     rows = rows.slice().sort((a,b)=> String(b["제출시각"]).localeCompare(String(a["제출시각"])));
+    const dups = dupCounts();
     const body = rows.map(r=>{
       const day = String(r["응시요일"]||"");
       const cls = DAY_CLASS[day] || "sat";
+      const dkey = weekStartKey(r["제출시각"]) + "|" + String(r["이름"]||"").trim() + "|" + String(r["학교"]||"").trim();
+      const dup = dups[dkey] > 1 ? ' <span class="tag dup">중복</span>' : '';
+      const info = (r["이름"]||"") + " · " + (r["학교"]||"") + " · " + day + (r["응시일자"] ? " ("+r["응시일자"]+")" : "");
       return `<tr>
         <td class="when">${esc(shortTime(r["제출시각"]))}</td>
-        <td class="nm">${esc(r["이름"])}</td>
+        <td class="nm">${esc(r["이름"])}${dup}</td>
         <td>${esc(r["학교"])}</td>
         <td>${esc(r["학년"])}</td>
         <td class="id">${esc(r["학생ID"])}</td>
         <td>${esc(r["선택과목"])}</td>
         <td><span class="tag ${cls}">${esc(day)}</span></td>
         <td>${esc(r["응시일자"])}</td>
+        <td class="del"><button class="del-btn" data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}" data-info="${esc(info)}">삭제</button></td>
       </tr>`;
     }).join("");
     $("list").innerHTML = `<div class="table-card"><div class="tbl-scroll"><table>
-      <thead><tr><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th></tr></thead>
+      <thead><tr><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th><th>삭제</th></tr></thead>
       <tbody>${body}</tbody></table></div></div>`;
+  }
+
+  // 신청 삭제 (중복 신청 정리) — 행 번호 + 이름·제출시각을 함께 보내 안전하게 삭제
+  $("list").addEventListener("click", function(e){
+    const btn = e.target.closest(".del-btn");
+    if (btn) deleteSignup(btn);
+  });
+  function deleteSignup(btn){
+    if (!window.confirm(btn.dataset.info + "\n\n이 신청을 삭제할까요?\n시트에서 해당 행이 지워지며 되돌릴 수 없어요.")) return;
+    btn.disabled = true; btn.textContent = "삭제 중…";
+    const cb = "shuegukDel" + Date.now();
+    const script = document.createElement("script");
+    let settled = false;
+    const finish = () => {
+      if (settled) return true;
+      settled = true; clearTimeout(timer);
+      window[cb] = undefined;
+      if (script.parentNode) script.parentNode.removeChild(script);
+      return false;
+    };
+    const restore = () => { btn.disabled = false; btn.textContent = "삭제"; };
+    const timer = setTimeout(function(){
+      if (finish()) return;
+      restore();
+      alert("응답이 없어요.\nApps Script(signup_code.gs)를 새 버전으로 재배포했는지 확인해 주세요.");
+    }, 8000);
+    window[cb] = function(resp){
+      if (finish()) return;
+      if (resp && resp.result === "success"){ fetchData(); return; }
+      if (resp && resp.message === "stale"){
+        alert("목록이 최신 상태가 아니에요. 현황을 새로 불러올게요.\n다시 확인 후 삭제해 주세요.");
+        fetchData(); return;
+      }
+      restore();
+      alert(resp && resp.message === "unauthorized"
+        ? "권한이 없어요. 새로고침 후 다시 로그인해 주세요."
+        : "삭제에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    };
+    script.onerror = function(){
+      if (finish()) return;
+      restore();
+      alert("삭제에 실패했어요. 인터넷 연결을 확인해 주세요.");
+    };
+    script.src = DATA_URL + "?action=delete&row=" + encodeURIComponent(btn.dataset.row)
+               + "&ts=" + encodeURIComponent(btn.dataset.ts)
+               + "&name=" + encodeURIComponent(btn.dataset.name)
+               + "&pw=" + encodeURIComponent(teacherPw)
+               + "&callback=" + cb + "&t=" + Date.now();
+    document.body.appendChild(script);
   }
 
   function shortTime(ts){
