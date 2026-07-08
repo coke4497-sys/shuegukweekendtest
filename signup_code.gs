@@ -28,9 +28,12 @@
  *
  * ── 신청 삭제 (중복 신청 정리, 교사 전용) ─────────────────────
  * 교사용 페이지 표의 '삭제' 버튼이 사용합니다.
- *   - action=delete&row=&name=&ts=&pw= : 해당 행 삭제
+ *   - action=delete&row=&name=&ts=&pw=  : 한 행 삭제
+ *   - action=deleteMany&items=&pw=      : 여러 행 일괄 삭제
+ *     items = JSON 배열 [[행번호, 이름, 제출시각], ...]
  * 행 번호만 믿지 않고 이름·제출시각을 대조해, 목록을 연 뒤 시트가
- * 바뀌어 행이 밀렸으면 지우지 않고 stale 을 돌려줍니다(새로고침 유도).
+ * 바뀌어 행이 밀렸으면 지우지 않고 건너뜁니다(stale — 새로고침 유도).
+ * 일괄 삭제는 큰 행 번호부터 지워 행 밀림 없이 안전합니다.
  * ──────────────────────────────────────────────────────────
  */
 
@@ -298,6 +301,14 @@ function doGet(e) {
     return reply_(params.callback, deleteSignup_(params));
   }
 
+  // 신청 일괄 삭제 (교사 전용) — 여러 건 선택 삭제
+  if (params.action === "deleteMany") {
+    if (params.pw !== TEACHER_PASSWORD) {
+      return reply_(params.callback, { result: "error", message: "unauthorized" });
+    }
+    return reply_(params.callback, deleteManySignups_(params));
+  }
+
   return ContentService.createTextOutput("이수경국어 주말 모의고사 신청 엔드포인트가 작동 중입니다.");
 }
 
@@ -326,6 +337,39 @@ function deleteSignup_(params) {
     lock.releaseLock();
   }
 }
+// 여러 행 일괄 삭제. items = [[행번호, 이름, 제출시각], ...]
+// 큰 행 번호부터 지워야 앞선 삭제로 아래 행이 밀려도 안전하다.
+// 대조에 실패한 행은 지우지 않고 stale 로 센다.
+function deleteManySignups_(params) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var items;
+    try { items = JSON.parse(params.items || "[]"); } catch (e) { items = []; }
+    if (!items.length) return { result: "error", message: "empty" };
+    var sheet = getSheet_();
+    items.sort(function (a, b) { return (+b[0]) - (+a[0]); });
+    var deleted = 0, stale = 0;
+    items.forEach(function (it) {
+      var row = parseInt(it[0], 10);
+      var name = String(it[1] || "").trim();
+      var ts = normTs_(it[2]);
+      if (!row || row < 2 || row > sheet.getLastRow()) { stale++; return; }
+      var v = sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+      var rn = String(v[HEADERS.indexOf("이름")] || "").trim();
+      var rts = normTs_(v[HEADERS.indexOf("제출시각")]);
+      if (!rn || rn !== name || !ts || rts !== ts) { stale++; return; }
+      sheet.deleteRow(row);
+      deleted++;
+    });
+    return { result: "success", deleted: deleted, stale: stale };
+  } catch (err) {
+    return { result: "error", message: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // 제출시각을 비교용 문자열로 정규화 (셀의 Date 값·문자열, ISO 문자열 모두 흡수)
 function normTs_(v) {
   var d = parseTs_(v);
