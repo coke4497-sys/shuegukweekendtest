@@ -362,6 +362,22 @@
     clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200);
   }
 
+  // 학생 개별 페이지에서 넘어온 경우 이름·학교·학년·학부모8자리 자동 입력.
+  // (웹앱 주소 뒤 ?name=&school=&grade=&sid= — 허브 omr.html 이 실어 보냄)
+  (function prefill(){
+    if(!(window.google && google.script && google.script.url && google.script.url.getLocation)) return;
+    google.script.url.getLocation(function(loc){
+      var p = (loc && loc.parameter) || {};
+      if(p.name)   document.getElementById('name').value = p.name;
+      if(p.school) document.getElementById('school').value = p.school;
+      if(p.sid)    document.getElementById('parentPhone').value = String(p.sid).replace(/\D/g,'');
+      if(p.grade){
+        var b = document.querySelector('.subj button[data-grade="'+String(p.grade)+'"]');
+        if(b) pickGrade(b);
+      }
+    });
+  })();
+
   function submit(){
     const name=document.getElementById('name').value.trim();
     const school=document.getElementById('school').value.trim();
