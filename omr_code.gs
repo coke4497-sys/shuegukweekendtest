@@ -143,6 +143,8 @@ function studentReports_(id, name, school) {
       level:     rep.result.grade,              // 등급
       cuts:      rep.exam.cuts,                 // 등급컷
       areas:     rep.result.areas,              // 영역별 성취도
+      total:     rep.result.total,              // 총점(배점 합)
+      detail:    rep.result.detail,             // 문항 채점표 (정답·학생답안·배점·정오)
       submittedAt: '' + r[0]
     });
   }
