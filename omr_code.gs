@@ -10,6 +10,11 @@
  *   (1) 응답 시트 맨 끝에 '학생ID'(부모님 8자리, 010 제외) 열을 추가해 저장.
  *       → omr_student.html 의 제출 payload 에 studentId 를 담아 보내면 기록됩니다.
  *       (옛 응답은 빈칸이어도 이름+학교로 보조 매칭되므로 그대로 조회됩니다.)
+ *
+ * ★ v3 변경점 (매칭 규칙 교정):
+ *   studentReports 매칭을 이름+학교 1차(학교는 느슨 비교)로 바꿈.
+ *   학생ID(부모님 8자리)는 **동명이인(같은 이름·학교) 구분용 보조**로만 사용.
+ *   — 쌍둥이 형제는 부모님 번호가 같아서 ID를 1차 키로 쓰면 형제 성적이 섞이기 때문.
  *   (2) doGet 에 외부 페이지용 JSON/JSONP API 추가:
  *       .../exec?action=studentReports&id=<8자리>&name=<이름>&school=<학교>&callback=<함수>
  *       → 그 학생의 성적표만 반환(전체 미반환 = 개인정보 보호).
@@ -94,13 +99,14 @@ function apiResponse_(p) {
 }
 
 // 한 학생의 주말 모의고사 성적표 목록(최신순)을 만든다.
-//  - 학생ID(부모님 8자리)가 같은 행을 우선 매칭.
-//  - 학생ID가 비어 있는 옛 행은 이름(+학교) 일치로 보조 매칭.
+//  - 1차: 이름+학교 일치(학교는 느슨 비교 — '행신고'='행신고등학교').
+//  - 2차: 동명이인(같은 이름·학교) 구분 — 행·요청 양쪽에 학생ID가 있을 때만 대조.
+//    ※ 쌍둥이는 학생ID(부모님 번호)가 같으므로 ID를 1차 키로 쓰지 않는다. 이름이 달라 1차에서 분리됨.
 function studentReports_(id, name, school) {
   id = String(id || '').trim();
   name = String(name || '').trim();
   school = String(school || '').trim();
-  if (!id && !name) return [];
+  if (!name) return [];
 
   const sh = SS().getSheetByName('응답');
   if (!sh || sh.getLastRow() < 2) return [];
@@ -114,9 +120,10 @@ function studentReports_(id, name, school) {
     const rid = idIdx >= 0 ? String(r[idIdx] || '').trim() : '';
     const rname = String(r[3] || '').trim();
     const rschool = String(r[4] || '').trim();
-    const match = (id && rid && rid === id) ||
-                  (!rid && name && rname === name && (!school || rschool === school));
-    if (!match) continue;
+    const nameOk = rname === name;
+    const schoolOk = !school || !rschool || schoolMatch_(rschool, school);
+    const idOk = !rid || !id || rid === id;   // 동명이인 구분: 양쪽에 ID가 있을 때만 대조
+    if (!(nameOk && schoolOk && idOk)) continue;
 
     const answers = {};
     for (let q = 1; q <= 45; q++) answers[q] = r[9 + q];   // 점수/총점/등급(7~9) 다음이 1번(10)
@@ -141,6 +148,19 @@ function studentReports_(id, name, school) {
   }
   out.sort(function(a, b){ return a.submittedAt < b.submittedAt ? 1 : (a.submittedAt > b.submittedAt ? -1 : 0); });
   return out;
+}
+
+// 학교 이름 느슨 비교 (리포트 백엔드 schoolMatch_와 동일 규칙)
+function schoolMatch_(a, b) {
+  a = String(a || '').replace(/\s+/g, '');
+  b = String(b || '').replace(/\s+/g, '');
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // '고등학교'·'고' 접미어 차이를 흡수해 비교
+  var na = a.replace(/(등학교|고등학교|중학교|학교|고|중)$/,'');
+  var nb = b.replace(/(등학교|고등학교|중학교|학교|고|중)$/,'');
+  if (na && nb && na === nb) return true;
+  return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
 }
 
 // ───────── 열려 있는 회차 목록 (학생 화면 드롭다운용) ─────────

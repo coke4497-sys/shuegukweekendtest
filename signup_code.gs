@@ -25,6 +25,13 @@
  * 신청 제출(submit)이 막힙니다. 매주 수요일에 '신청 받는 중'으로
  * 켜고, 금요일 밤 11:59 이후 '신청 중단'으로 끄면 됩니다.
  * ──────────────────────────────────────────────────────────
+ *
+ * ── 신청 삭제 (중복 신청 정리, 교사 전용) ─────────────────────
+ * 교사용 페이지 표의 '삭제' 버튼이 사용합니다.
+ *   - action=delete&row=&name=&ts=&pw= : 해당 행 삭제
+ * 행 번호만 믿지 않고 이름·제출시각을 대조해, 목록을 연 뒤 시트가
+ * 바뀌어 행이 밀렸으면 지우지 않고 stale 을 돌려줍니다(새로고침 유도).
+ * ──────────────────────────────────────────────────────────
  */
 
 var SHEET_ID = "1pB05VXT__-kJHoNpQxQSxbm4PhlB6XuJ7EvVG79pW14";
@@ -275,15 +282,54 @@ function doGet(e) {
     var sheet = getSheet_();
     var values = sheet.getDataRange().getValues();
     var headers = values.shift() || [];
-    var rows = values.map(function (r) {
-      var o = {};
+    var rows = values.map(function (r, idx) {
+      var o = { _row: idx + 2 };   // 시트의 실제 행 번호 (1행은 헤더) — 삭제 버튼용
       headers.forEach(function (h, i) { o[h] = r[i]; });
       return o;
     });
     return reply_(params.callback, { result: "success", rows: rows, open: isOpen_(), cap: DAY_CAP, days: DAYS, grades: getActiveGrades_() });
   }
 
+  // 신청 삭제 (교사 전용) — 중복 신청 정리용
+  if (params.action === "delete") {
+    if (params.pw !== TEACHER_PASSWORD) {
+      return reply_(params.callback, { result: "error", message: "unauthorized" });
+    }
+    return reply_(params.callback, deleteSignup_(params));
+  }
+
   return ContentService.createTextOutput("이수경국어 주말 모의고사 신청 엔드포인트가 작동 중입니다.");
+}
+
+// 행 번호 + 이름·제출시각 대조 후 삭제. 목록을 연 뒤 다른 곳에서 시트가
+// 바뀌어 행이 밀렸으면 지우지 않고 stale 을 돌려준다(페이지가 새로고침 안내).
+function deleteSignup_(params) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sheet = getSheet_();
+    var row = parseInt(params.row, 10);
+    if (!row || row < 2 || row > sheet.getLastRow()) {
+      return { result: "error", message: "stale" };
+    }
+    var values = sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+    var name = String(values[HEADERS.indexOf("이름")] || "").trim();
+    var ts = normTs_(values[HEADERS.indexOf("제출시각")]);
+    if (!name || name !== String(params.name || "").trim() || !ts || ts !== normTs_(params.ts)) {
+      return { result: "error", message: "stale" };
+    }
+    sheet.deleteRow(row);
+    return { result: "success" };
+  } catch (err) {
+    return { result: "error", message: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+// 제출시각을 비교용 문자열로 정규화 (셀의 Date 값·문자열, ISO 문자열 모두 흡수)
+function normTs_(v) {
+  var d = parseTs_(v);
+  return d ? Utilities.formatDate(d, "Asia/Seoul", "yyyy-MM-dd HH:mm") : "";
 }
 
 // callback 이 있으면 JSONP(자바스크립트), 없으면 일반 JSON 으로 응답

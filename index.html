@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>이수경 국어 · 주간 모의고사 OMR</title>
+<!-- ※ 실제 학생 화면은 Apps Script 프로젝트 안의 'omr_student' 파일로 서비스됩니다.
+     이 파일은 참고본 — 여기 반영된 수정(학부모님 연락처 8자리 입력 + payload.studentId)을
+     Apps Script의 omr_student에도 동일하게 적용하고 재배포해야 실서비스에 반영됩니다. -->
+
 <!-- PWA: 홈 화면 추가용 아이콘·설정 (이수경국어 OMR) -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -220,6 +224,8 @@
     <input type="text" id="name" placeholder="이름" autocomplete="off">
     <label>학교</label>
     <input type="text" id="school" placeholder="학교명" autocomplete="off">
+    <label>학부모님 연락처 8자리 (010 제외 — 학생 개별 페이지 성적 연결용)</label>
+    <input type="text" id="parentPhone" placeholder="예: 12345678" inputmode="numeric" maxlength="9" autocomplete="off">
     <label>학년</label>
     <div class="subj">
       <button type="button" data-grade="1" onclick="pickGrade(this)">1학년</button>
@@ -390,12 +396,14 @@
   function submit(){
     const name=document.getElementById('name').value.trim();
     const school=document.getElementById('school').value.trim();
+    const studentId=document.getElementById('parentPhone').value.replace(/\D/g,'');
     const examName=document.getElementById('exam').value;
     const mon=document.getElementById('mon').value;
     const day=document.getElementById('day').value;
     if(!examName){ toast('응시 회차를 선택해 주세요'); window.scrollTo({top:0,behavior:'smooth'}); return; }
     if(!name){ toast('이름을 입력해 주세요'); document.getElementById('name').focus(); return; }
     if(!school){ toast('학교를 입력해 주세요'); document.getElementById('school').focus(); return; }
+    if(!/^\d{8}$/.test(studentId)){ toast('학부모님 연락처 8자리를 입력해 주세요 (010 제외)'); document.getElementById('parentPhone').focus(); return; }
     if(!grade){ toast('학년을 선택해 주세요'); window.scrollTo({top:0,behavior:'smooth'}); return; }
     if(!subject){ toast('선택과목을 골라 주세요'); window.scrollTo({top:0,behavior:'smooth'}); return; }
 
@@ -407,6 +415,7 @@
 
     const payload={
       examName, name, school, grade, subject,
+      studentId,   // 부모님 8자리 — 응답 시트 '학생ID' 열에 기록(동명이인 구분용)
       examDate: `${mon}월 ${day}일`,
       examMonth: Number(mon), examDay: Number(day),
       answers: picks,
