@@ -128,7 +128,7 @@ function studentReports_(id, name, school) {
     const answers = {};
     for (let q = 1; q <= 45; q++) answers[q] = r[9 + q];   // 점수/총점/등급(7~9) 다음이 1번(10)
     const payload = {
-      examName: '' + r[1], examDate: '' + r[2], name: rname,
+      examName: '' + r[1], examDate: fmtExamDate_(r[2]), name: rname,
       school: rschool, grade: '' + r[5], subject: '' + r[6], answers: answers
     };
     let rep;
@@ -161,6 +161,14 @@ function schoolMatch_(a, b) {
   var nb = b.replace(/(등학교|고등학교|중학교|학교|고|중)$/,'');
   if (na && nb && na === nb) return true;
   return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
+}
+
+// 응시일 표시 정리 — 시트가 '6월 3일'을 날짜 값으로 자동 변환한 옛 기록도 'M월 D일'로 되돌린다.
+function fmtExamDate_(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return Utilities.formatDate(v, 'Asia/Seoul', 'M월 d일');
+  }
+  return String(v == null ? '' : v);
 }
 
 // ───────── 열려 있는 회차 목록 (학생 화면 드롭다운용) ─────────
@@ -213,7 +221,9 @@ function saveResponse(payload, got, total, grade) {
   const idCol = studentIdCol_(sh);                // 1-base 위치
 
   const row = [
-    new Date(), payload.examName, payload.examDate, payload.name,
+    new Date(), payload.examName,
+    "'" + String(payload.examDate || ''),   // '6월 3일' — 시트가 날짜+시간으로 자동 변환하지 않게 텍스트로 저장
+    payload.name,
     payload.school, payload.grade, payload.subject, got, total, grade
   ];
   for (let q = 1; q <= 45; q++) row.push(payload.answers[q] || '');
@@ -280,7 +290,7 @@ function getReportByRow(rowNum) {
     for (let q = 1; q <= 45; q++) answers[q] = r[9 + q];
 
     const payload = {
-      examName: '' + r[1], examDate: '' + r[2], name: '' + r[3],
+      examName: '' + r[1], examDate: fmtExamDate_(r[2]), name: '' + r[3],
       school: '' + r[4], grade: '' + r[5], subject: '' + r[6], answers: answers
     };
     const report = scoreAndBuild(payload);
