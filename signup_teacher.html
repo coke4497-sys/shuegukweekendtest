@@ -141,6 +141,14 @@
     font-size:12px; font-weight:700; padding:5px 11px; border-radius:8px; cursor:pointer; }
   .del-btn:hover{ background:#fcebea; border-color:#e8b6b2; }
   .del-btn:disabled{ opacity:.5; cursor:default; }
+  th.sel,td.sel{ text-align:center; width:34px; padding-left:10px; padding-right:6px; }
+  .sel input{ width:16px; height:16px; accent-color:var(--lav-d); cursor:pointer; }
+  .count-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:14px 16px 8px; flex-wrap:wrap; }
+  .count-row .count-label{ margin:0; }
+  .bulk-del{ border:none; background:var(--bad); color:#fff; font-family:'Gowun Batang',serif; font-weight:700;
+    font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer; }
+  .bulk-del:active{ opacity:.85; }
+  .bulk-del:disabled{ opacity:.5; cursor:default; }
   .empty{ padding:40px; text-align:center; color:var(--muted); }
 
   /* 비밀번호 게이트 */
@@ -248,7 +256,10 @@
     <select id="f-school"><option value="">전체 학교</option></select>
   </div>
 
-  <div class="count-label" id="count-label"></div>
+  <div class="count-row">
+    <div class="count-label" id="count-label"></div>
+    <button class="bulk-del" id="del-selected" style="display:none;">선택 0건 삭제</button>
+  </div>
   <div id="list"></div>
 </main>
 
@@ -455,7 +466,7 @@
     $("s-latest-who").textContent = latest ? (latest["이름"]+" · "+latest["학교"]) : "";
 
     $("count-label").textContent = `신청 ${rows.length}건 · 학생 ${new Set(rows.map(studentKey)).size}명`;
-    if (rows.length === 0){ $("list").innerHTML = `<div class="table-card"><div class="empty">조건에 맞는 신청이 없어요.</div></div>`; return; }
+    if (rows.length === 0){ $("list").innerHTML = `<div class="table-card"><div class="empty">조건에 맞는 신청이 없어요.</div></div>`; updateBulkBtn(); return; }
     renderTable(rows);
   }
 
@@ -490,6 +501,7 @@
       const dateLabel = examDayLabel(r);
       const info = (r["이름"]||"") + " · " + (r["학교"]||"") + " · " + day + (dateLabel ? " ("+dateLabel+")" : "");
       return `<tr>
+        <td class="sel"><input type="checkbox" class="row-sel" data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}"></td>
         <td class="when">${esc(shortTime(r["제출시각"]))}</td>
         <td class="nm">${esc(r["이름"])}${dup}</td>
         <td>${esc(r["학교"])}</td>
@@ -502,9 +514,73 @@
       </tr>`;
     }).join("");
     $("list").innerHTML = `<div class="table-card"><div class="tbl-scroll"><table>
-      <thead><tr><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th><th>삭제</th></tr></thead>
+      <thead><tr><th class="sel"><input type="checkbox" id="sel-all" title="보이는 신청 전체 선택"></th><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th><th>삭제</th></tr></thead>
       <tbody>${body}</tbody></table></div></div>`;
+    updateBulkBtn();
   }
+
+  // ── 선택 삭제 (여러 건 체크 → 한 번에 삭제) ──
+  function selectedBoxes(){ return [...document.querySelectorAll("#list .row-sel:checked")]; }
+  function updateBulkBtn(){
+    const n = selectedBoxes().length;
+    const btn = $("del-selected");
+    btn.style.display = n ? "inline-block" : "none";
+    btn.textContent = `선택 ${n}건 삭제`;
+    const all = document.querySelectorAll("#list .row-sel");
+    const selAll = document.getElementById("sel-all");
+    if (selAll) selAll.checked = all.length > 0 && n === all.length;
+  }
+  $("list").addEventListener("change", function(e){
+    if (e.target.id === "sel-all"){
+      document.querySelectorAll("#list .row-sel").forEach(b => { b.checked = e.target.checked; });
+    }
+    updateBulkBtn();
+  });
+  $("del-selected").addEventListener("click", function(){
+    const boxes = selectedBoxes();
+    if (!boxes.length) return;
+    const names = boxes.slice(0,5).map(b=>b.dataset.name).join(", ") + (boxes.length>5 ? " 외" : "");
+    if (!window.confirm(`선택한 ${boxes.length}건(${names})을 삭제할까요?\n시트에서 해당 행이 지워지며 되돌릴 수 없어요.`)) return;
+    const items = boxes.map(b => [ +b.dataset.row, b.dataset.name, b.dataset.ts ]);
+    const btn = $("del-selected");
+    btn.disabled = true; btn.textContent = "삭제 중…";
+    const cb = "shuegukDelM" + Date.now();
+    const script = document.createElement("script");
+    let settled = false;
+    const finish = () => {
+      if (settled) return true;
+      settled = true; clearTimeout(timer);
+      window[cb] = undefined;
+      if (script.parentNode) script.parentNode.removeChild(script);
+      btn.disabled = false;
+      return false;
+    };
+    const timer = setTimeout(function(){
+      if (finish()) return;
+      updateBulkBtn();
+      alert("응답이 없어요.\nApps Script(signup_code.gs)를 새 버전으로 재배포했는지 확인해 주세요.");
+    }, 15000);
+    window[cb] = function(resp){
+      if (finish()) return;
+      if (resp && resp.result === "success"){
+        if (resp.stale > 0) alert(`${resp.deleted}건을 삭제했어요.\n${resp.stale}건은 목록이 최신이 아니라 건너뛰었어요 — 새 목록에서 다시 확인해 주세요.`);
+        fetchData(); return;
+      }
+      updateBulkBtn();
+      alert(resp && resp.message === "unauthorized"
+        ? "권한이 없어요. 새로고침 후 다시 로그인해 주세요."
+        : "삭제에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    };
+    script.onerror = function(){
+      if (finish()) return;
+      updateBulkBtn();
+      alert("삭제에 실패했어요. 인터넷 연결을 확인해 주세요.");
+    };
+    script.src = DATA_URL + "?action=deleteMany&items=" + encodeURIComponent(JSON.stringify(items))
+               + "&pw=" + encodeURIComponent(teacherPw)
+               + "&callback=" + cb + "&t=" + Date.now();
+    document.body.appendChild(script);
+  });
 
   // 신청 삭제 (중복 신청 정리) — 행 번호 + 이름·제출시각을 함께 보내 안전하게 삭제
   $("list").addEventListener("click", function(e){
