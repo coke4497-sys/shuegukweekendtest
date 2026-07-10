@@ -268,6 +268,12 @@ function doGet(e) {
     return reply_(params.callback, { result: "success", grades: setActiveGrades_(gsel) });
   }
 
+  // 학생 개별 페이지: 이 학생의 '이번 주' 신청 내역 (본인 것만 반환)
+  // ?action=mySignups&name=&school=&id=&callback=
+  if (params.action === "mySignups") {
+    return reply_(params.callback, mySignups_(params));
+  }
+
   // 폼: 신청 처리 (응답을 읽어 마감 여부를 알려주기 위해 GET/JSONP 사용)
   if (params.action === "submit") {
     var data = {
@@ -374,6 +380,47 @@ function deleteManySignups_(params) {
 function normTs_(v) {
   var d = parseTs_(v);
   return d ? Utilities.formatDate(d, "Asia/Seoul", "yyyy-MM-dd HH:mm") : "";
+}
+
+// 한 학생의 이번 주 신청 내역. 이름+학교(느슨 비교) 1차, 학생ID는 동명이인 구분 보조
+// (모의고사 성적 조회와 동일 규칙 — 쌍둥이는 이름으로, 동명이인은 ID로 분리).
+function mySignups_(params) {
+  var name = String(params.name || "").trim();
+  var school = String(params.school || "").trim();
+  var sid = String(params.id || "").trim();
+  if (!name) return { result: "success", signups: [] };
+  var sheet = getSheet_();
+  var values = sheet.getDataRange().getValues();
+  var headers = values.shift() || [];
+  var iN = headers.indexOf("이름"), iS = headers.indexOf("학교"), iId = headers.indexOf("학생ID"),
+      iDay = headers.indexOf("응시요일"), iT = headers.indexOf("제출시각");
+  var week = weekKey_(new Date());
+  var seen = {}, out = [];
+  values.forEach(function (r) {
+    if (String(r[iN] || "").trim() !== name) return;
+    var rs = String(r[iS] || "").trim();
+    if (school && rs && !schoolMatch_(rs, school)) return;
+    var rid = String(r[iId] || "").replace(/^'/, "").trim();
+    if (rid && sid && rid !== sid) return;          // 동명이인 구분(양쪽에 ID 있을 때만)
+    if (weekKey_(r[iT]) !== week) return;           // 이번 주만
+    var day = String(r[iDay] || "").trim();
+    if (DAYS.indexOf(day) === -1 || seen[day]) return;
+    seen[day] = true;                                // 같은 요일 중복 신청은 1건으로
+    out.push({ day: day, date: examDateLabel_(week, day) });
+  });
+  return { result: "success", week: week, signups: out };
+}
+
+// 학교 이름 느슨 비교 (리포트·OMR 백엔드와 동일 규칙)
+function schoolMatch_(a, b) {
+  a = String(a || "").replace(/\s+/g, "");
+  b = String(b || "").replace(/\s+/g, "");
+  if (!a || !b) return false;
+  if (a === b) return true;
+  var na = a.replace(/(등학교|고등학교|중학교|학교|고|중)$/, "");
+  var nb = b.replace(/(등학교|고등학교|중학교|학교|고|중)$/, "");
+  if (na && nb && na === nb) return true;
+  return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
 }
 
 // callback 이 있으면 JSONP(자바스크립트), 없으면 일반 JSON 으로 응답
