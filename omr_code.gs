@@ -83,7 +83,7 @@ function apiResponse_(p) {
   let out;
   try {
     if (p.action === 'studentReports') {
-      out = { result: 'success', reports: studentReports_(p.id, p.name, p.school) };
+      out = { result: 'success', reports: studentReports_(p.id, p.name, p.school, p.uniq) };
     } else {
       out = { result: 'error', message: 'unknown action: ' + p.action };
     }
@@ -102,10 +102,13 @@ function apiResponse_(p) {
 //  - 1차: 이름+학교 일치(학교는 느슨 비교 — '행신고'='행신고등학교').
 //  - 2차: 동명이인(같은 이름·학교) 구분 — 행·요청 양쪽에 학생ID가 있을 때만 대조.
 //    ※ 쌍둥이는 학생ID(부모님 번호)가 같으므로 ID를 1차 키로 쓰지 않는다. 이름이 달라 1차에서 분리됨.
-function studentReports_(id, name, school) {
+//  - uniq=1 이면(명단에 그 이름이 1명뿐 — 학생 페이지가 판단해 전달) ID 대조 생략:
+//    OMR 제출 시 8자리를 잘못 적어도 이름+학교로 매칭된다.
+function studentReports_(id, name, school, uniqFlag) {
   id = String(id || '').trim();
   name = String(name || '').trim();
   school = String(school || '').trim();
+  const uniq = String(uniqFlag || '') === '1';
   if (!name) return [];
 
   const sh = SS().getSheetByName('응답');
@@ -122,7 +125,7 @@ function studentReports_(id, name, school) {
     const rschool = String(r[4] || '').trim();
     const nameOk = rname === name;
     const schoolOk = !school || !rschool || schoolMatch_(rschool, school);
-    const idOk = !rid || !id || rid === id;   // 동명이인 구분: 양쪽에 ID가 있을 때만 대조
+    const idOk = uniq || !rid || !id || rid === id;   // 동명이인 구분(이름이 유일하면 생략)
     if (!(nameOk && schoolOk && idOk)) continue;
 
     const answers = {};
