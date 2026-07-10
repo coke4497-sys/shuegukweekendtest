@@ -384,10 +384,13 @@ function normTs_(v) {
 
 // 한 학생의 이번 주 신청 내역. 이름+학교(느슨 비교) 1차, 학생ID는 동명이인 구분 보조
 // (모의고사 성적 조회와 동일 규칙 — 쌍둥이는 이름으로, 동명이인은 ID로 분리).
+// uniq=1 이면(명단에 그 이름이 1명뿐 — 학생 페이지가 판단해 전달) 학생ID 대조를 생략:
+// 신청서에 8자리를 잘못 적어도 이름+학교로 매칭된다.
 function mySignups_(params) {
   var name = String(params.name || "").trim();
   var school = String(params.school || "").trim();
   var sid = String(params.id || "").trim();
+  var uniq = String(params.uniq || "") === "1";
   if (!name) return { result: "success", signups: [] };
   var sheet = getSheet_();
   var values = sheet.getDataRange().getValues();
@@ -401,7 +404,7 @@ function mySignups_(params) {
     var rs = String(r[iS] || "").trim();
     if (school && rs && !schoolMatch_(rs, school)) return;
     var rid = String(r[iId] || "").replace(/^'/, "").trim();
-    if (rid && sid && rid !== sid) return;          // 동명이인 구분(양쪽에 ID 있을 때만)
+    if (!uniq && rid && sid && rid !== sid) return; // 동명이인 구분(이름이 유일하면 생략)
     if (weekKey_(r[iT]) !== week) return;           // 이번 주만
     var day = String(r[iDay] || "").trim();
     if (DAYS.indexOf(day) === -1 || seen[day]) return;
