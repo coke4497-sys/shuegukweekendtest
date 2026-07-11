@@ -218,7 +218,7 @@ function deleteResponse_(p) {
     const r = sh.getRange(row, 1, 1, 4).getValues()[0];
     const name = String(r[3] || '').trim();
     const ts = normRespTs_(r[0]);
-    if (!name || name !== String(p.name || '').trim() || !ts || ts !== String(p.ts || '').trim()) {
+    if (!name || name !== String(p.name || '').trim() || !ts || ts !== normRespTs_(p.ts)) {
       return { result: 'error', message: 'stale' };
     }
     sh.deleteRow(row);
@@ -230,12 +230,23 @@ function deleteResponse_(p) {
   }
 }
 
-// 제출시각을 대조용 문자열로 정규화 (초 단위까지 — 중복 제출도 구분)
+// 성적 대시보드(teacher.html)에서 google.script.run 으로 부르는 삭제 함수.
+// getResponses()가 준 row·submittedAt·name 을 그대로 넘기면 대조 후 삭제한다.
+function deleteResponseRun(pw, row, name, ts) {
+  if (String(pw || '') !== 'sh') return { result: 'error', message: 'unauthorized' };
+  return deleteResponse_({ row: row, name: name, ts: ts });
+}
+
+// 제출시각을 대조용 문자열로 정규화 (초 단위까지 — 중복 제출도 구분).
+// Date 값, 'yyyy-MM-dd HH:mm' 문자열, Date.toString() 형식 모두 흡수.
 function normRespTs_(v) {
   if (v instanceof Date && !isNaN(v.getTime())) {
     return Utilities.formatDate(v, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
   }
-  return String(v == null ? '' : v).trim();
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  const d = new Date(/^\d{4}-\d{2}-\d{2} /.test(s) ? s.replace(' ', 'T') : s);
+  return isNaN(d.getTime()) ? s : Utilities.formatDate(d, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
 }
 
 // ───────── 열려 있는 회차 목록 (학생 화면 드롭다운용) ─────────
