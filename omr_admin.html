@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OMR 제출 기록 정리 · 이수경국어</title>
+<meta name="theme-color" content="#c6d5d2" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --sage:#a9c0b4; --sage-d:#7fa08f;
+    --lav:#b8b0cc; --lav-d:#8d83a8; --lav-bg:#e8e3f0;
+    --ink:#3f3a44; --muted:#8a8590;
+    --line:#e4e0e8; --paper:#f7f6f3; --card:#ffffff;
+    --head2:#dcd5e6; --ok:#1b8a3a; --bad:#d0473f;
+    --shadow:0 2px 12px rgba(63,58,68,.07);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Gowun Dodum',-apple-system,system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    background:var(--paper); color:var(--ink);
+    max-width:760px; margin:0 auto; padding:0 0 50px; line-height:1.5;
+  }
+  header#topbar{
+    background:linear-gradient(135deg,#d8cfe6 0%,#c4d4cc 100%);
+    padding:20px 22px 18px; border-radius:0 0 22px 22px; box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  }
+  header#topbar .brand .name{ font-family:'Gowun Batang',serif; font-weight:700; font-size:23px; letter-spacing:2px; color:#473f55; }
+  header#topbar .brand .sub{ font-family:'Gowun Batang',serif; font-size:13px; color:#5d5568; letter-spacing:2px; margin-top:3px; }
+  .refresh{ border:none; background:rgba(255,255,255,.6); color:#473f55;
+    font-family:'Gowun Batang',serif; font-weight:700; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer; }
+  .refresh:disabled{ opacity:.5; cursor:default; }
+  .back{ display:inline-flex; align-items:center; gap:6px; color:var(--muted); text-decoration:none; font-size:14px; }
+  .back:hover{ color:var(--lav-d); }
+  .back svg{ width:16px; height:16px; }
+  .topback{ margin:16px 16px 0; }
+  .gateback{ margin-top:18px; }
+  .title-bar{ background:var(--lav-bg); margin:16px; padding:11px 18px; border-radius:10px;
+    font-family:'Gowun Batang',serif; font-size:15px; font-weight:700; color:#4a4356; text-align:center; }
+
+  .gate{ max-width:360px; margin:80px auto; padding:0 20px; }
+  .gate-card{ background:var(--card); border-radius:16px; box-shadow:var(--shadow); padding:32px 26px; text-align:center; }
+  .gate .name{ font-family:'Gowun Batang',serif; font-weight:700; font-size:23px; letter-spacing:2px; color:#473f55; }
+  .gate .sub{ font-family:'Gowun Batang',serif; font-size:13px; color:#5d5568; letter-spacing:2px; margin-top:3px; }
+  .gate h1{ font-size:13.5px; font-weight:400; margin:14px 0 20px; color:var(--muted); }
+  .gate input{ width:100%; font-family:inherit; font-size:16px; border:1.5px solid var(--line); background:#fafafb;
+    border-radius:10px; padding:13px 14px; -webkit-appearance:none; appearance:none; }
+  .gate input:focus{ outline:none; border-color:var(--lav); background:#fff; }
+  .gate button{ width:100%; border:none; background:var(--lav-d); color:#fff; font-family:'Gowun Batang',serif; font-weight:700;
+    font-size:16px; padding:14px; border-radius:12px; cursor:pointer; margin-top:12px; letter-spacing:1px; }
+  .gate button:disabled{ opacity:.6; cursor:default; }
+  .gate .ge{ color:var(--bad); font-size:12.5px; font-weight:700; margin-top:12px; min-height:1.1em; }
+
+  #app{ display:none; }
+  .state{ margin:40px auto; text-align:center; color:var(--muted); padding:0 20px; }
+  .state.err{ color:var(--bad); font-weight:700; }
+  .summary{ margin:0 16px 12px; font-size:13px; color:var(--muted); }
+  .summary b{ color:var(--bad); }
+
+  .grp{ background:var(--card); border-radius:14px; box-shadow:var(--shadow); margin:0 16px 12px; overflow:hidden; }
+  .grp-h{ background:var(--head2); padding:11px 16px; font-family:'Gowun Batang',serif; font-weight:700; font-size:14px;
+    color:#473f55; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .grp-h .tag{ font-size:11.5px; font-weight:700; background:#fcebea; color:var(--bad); border-radius:20px; padding:2px 9px; }
+  .grp-row{ display:flex; align-items:center; gap:12px; padding:11px 16px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .grp-row .when{ font-size:12.5px; color:var(--muted); min-width:130px; }
+  .grp-row .info{ flex:1; font-size:13.5px; min-width:140px; }
+  .grp-row .score{ font-weight:700; color:var(--lav-d); }
+  .del-btn{ border:1.5px solid var(--line); background:#fff; color:var(--bad); font-family:inherit;
+    font-size:12.5px; font-weight:700; padding:7px 13px; border-radius:9px; cursor:pointer; }
+  .del-btn:hover{ background:#fcebea; border-color:#e8b6b2; }
+  .del-btn:disabled{ opacity:.5; cursor:default; }
+  .empty{ background:var(--card); border-radius:14px; box-shadow:var(--shadow); padding:40px; text-align:center; color:var(--muted); margin:0 16px; }
+  .note{ margin:14px 16px 0; font-size:12.5px; color:var(--muted); background:var(--lav-bg); padding:10px 14px; border-radius:10px; }
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="name">이수경국어</div>
+    <div class="sub">Shueguk</div>
+    <h1>교사용 · OMR 제출 기록 정리 (중복 삭제)</h1>
+    <input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password" />
+    <button id="enter">확인</button>
+    <div class="ge" id="gate-err"></div>
+    <a class="back gateback" href="https://coke4497-sys.github.io/shueguk-hub/weekend.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+      주말 실전 모의고사로 가기
+    </a>
+  </div>
+</div>
+
+<header id="topbar" style="display:none;">
+  <div class="brand">
+    <div class="name">이수경국어</div>
+    <div class="sub">Shueguk · 제출 기록 정리</div>
+  </div>
+  <button class="refresh" id="refresh">새로고침</button>
+</header>
+
+<div class="state" id="state" style="display:none;">제출 기록을 불러오는 중…</div>
+
+<main id="app">
+  <a class="back topback" href="https://coke4497-sys.github.io/shueguk-hub/weekend.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+    주말 실전 모의고사로 가기
+  </a>
+  <div class="title-bar">같은 학생 · 같은 회차의 중복 제출</div>
+  <div class="summary" id="summary"></div>
+  <div id="list"></div>
+  <div class="note">같은 학생이 같은 회차를 여러 번 제출한 경우만 보여드려요.
+    보통 <b>마지막 제출(맨 아래)</b>을 남기고 앞의 것을 삭제하면 됩니다.
+    삭제하면 학생 성적표의 중복 탭도 사라집니다. (별 적립은 회차 단위라 삭제와 무관하게 정확)</div>
+</main>
+
+<script>
+  /* OMR 백엔드(.../exec) — omr_code.gs 배포 주소 */
+  const API = "https://script.google.com/macros/s/AKfycbyUHMdCH_u35Oeu6lEmx3yOYscoKLwEB8TC0QHGBOaCXZ4rbAnkMpP9_Na4l3QLOajGPA/exec";
+  const $ = id => document.getElementById(id);
+  let PW = "", ROWS = [];
+
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+  function jsonp(params, ms){
+    return new Promise(resolve => {
+      const cb = "omrAdm" + Date.now() + Math.floor(Math.random()*1000);
+      const s = document.createElement("script");
+      let done = false;
+      const clean = () => { window[cb] = undefined; if (s.parentNode) s.parentNode.removeChild(s); };
+      window[cb] = d => { if (done) return; done = true; clearTimeout(t); clean(); resolve(d); };
+      s.onerror = () => { if (done) return; done = true; clearTimeout(t); clean(); resolve(null); };
+      const t = setTimeout(() => { if (done) return; done = true; clean(); resolve(null); }, ms || 20000);
+      s.src = API + "?" + params + "&callback=" + cb + "&t=" + Date.now();
+      document.body.appendChild(s);
+    });
+  }
+
+  function submitPw(){
+    const v = $("pw").value.trim();
+    if (!v){ $("gate-err").textContent = "비밀번호를 입력해 주세요."; return; }
+    PW = v;
+    $("enter").disabled = true; $("enter").textContent = "확인 중…"; $("gate-err").textContent = "";
+    load(true);
+  }
+  $("enter").addEventListener("click", submitPw);
+  $("pw").addEventListener("keydown", e => { if (e.key === "Enter") submitPw(); });
+  $("pw").focus();
+  $("refresh").addEventListener("click", () => load(false));
+
+  function load(fromGate){
+    if (!fromGate){ $("state").style.display = "block"; $("state").textContent = "제출 기록을 불러오는 중…"; $("app").style.display = "none"; $("refresh").disabled = true; }
+    jsonp("action=responses&pw=" + encodeURIComponent(PW)).then(d => {
+      $("refresh").disabled = false;
+      if (!d || d.result !== "success"){
+        if (fromGate){
+          $("enter").disabled = false; $("enter").textContent = "확인";
+          $("gate-err").textContent = (d && d.message === "unauthorized")
+            ? "비밀번호가 올바르지 않습니다."
+            : "불러오지 못했어요. (OMR 백엔드 재배포 확인)";
+        } else {
+          $("state").className = "state err"; $("state").textContent = "불러오지 못했어요. 새로고침을 다시 눌러 주세요.";
+        }
+        return;
+      }
+      ROWS = d.rows || [];
+      $("gate").style.display = "none";
+      $("topbar").style.display = "flex";
+      $("state").style.display = "none";
+      $("app").style.display = "block";
+      render();
+    });
+  }
+
+  function render(){
+    // 같은 학생(이름+학교) · 같은 회차로 묶어 2건 이상만 표시
+    const groups = {};
+    ROWS.forEach(r => {
+      const k = r.name + "|" + r.school + "|" + r.exam;
+      (groups[k] = groups[k] || []).push(r);
+    });
+    const dups = Object.keys(groups).filter(k => groups[k].length > 1);
+    $("summary").innerHTML = `전체 제출 ${ROWS.length}건 · 중복 그룹 <b>${dups.length}개</b>`;
+    if (!dups.length){
+      $("list").innerHTML = `<div class="empty">중복 제출이 없어요. 깨끗합니다! 🎉</div>`;
+      return;
+    }
+    $("list").innerHTML = dups.map(k => {
+      const rows = groups[k].slice().sort((a,b) => String(a.ts).localeCompare(String(b.ts)));
+      const h = rows[0];
+      const body = rows.map(r =>
+        `<div class="grp-row">
+          <span class="when">${esc(r.ts)}</span>
+          <span class="info">${esc(r.subject)} · <span class="score">${esc(r.got)}점</span>${r.level?` · ${esc(r.level)}등급`:""}</span>
+          <button type="button" class="del-btn" data-row="${esc(r.row)}" data-ts="${esc(r.ts)}" data-name="${esc(r.name)}">삭제</button>
+        </div>`).join("");
+      return `<div class="grp">
+        <div class="grp-h">${esc(h.name)} · ${esc(h.school)} · ${esc(h.exam)} <span class="tag">${rows.length}건</span></div>
+        ${body}
+      </div>`;
+    }).join("");
+  }
+
+  $("list").addEventListener("click", function(e){
+    const btn = e.target.closest(".del-btn"); if (!btn) return;
+    if (!window.confirm(`${btn.dataset.name} · ${btn.dataset.ts} 제출을 삭제할까요?\n시트에서 해당 행이 지워지며 되돌릴 수 없어요.`)) return;
+    btn.disabled = true; btn.textContent = "삭제 중…";
+    jsonp("action=deleteResponse&row=" + encodeURIComponent(btn.dataset.row)
+        + "&ts=" + encodeURIComponent(btn.dataset.ts)
+        + "&name=" + encodeURIComponent(btn.dataset.name)
+        + "&pw=" + encodeURIComponent(PW), 15000)
+      .then(d => {
+        if (d && d.result === "success"){ load(false); return; }
+        btn.disabled = false; btn.textContent = "삭제";
+        if (d && d.message === "stale"){ alert("목록이 최신이 아니에요. 새로 불러올게요."); load(false); }
+        else if (d && d.message === "unauthorized"){ alert("권한이 없어요. 새로고침 후 다시 로그인해 주세요."); }
+        else alert("삭제에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      });
+  });
+</script>
+</body>
+</html>
