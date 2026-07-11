@@ -84,6 +84,14 @@ function apiResponse_(p) {
   try {
     if (p.action === 'studentReports') {
       out = { result: 'success', reports: studentReports_(p.id, p.name, p.school, p.uniq) };
+    } else if (p.action === 'responses') {
+      // 제출 기록 목록(관리용, omr_admin.html) — 비밀번호 필요
+      if (String(p.pw || '') !== 'sh') out = { result: 'error', message: 'unauthorized' };
+      else out = { result: 'success', rows: responsesList_() };
+    } else if (p.action === 'deleteResponse') {
+      // 제출 기록 한 건 삭제(중복 제출 정리) — 비밀번호 필요
+      if (String(p.pw || '') !== 'sh') out = { result: 'error', message: 'unauthorized' };
+      else out = deleteResponse_(p);
     } else {
       out = { result: 'error', message: 'unknown action: ' + p.action };
     }
@@ -174,6 +182,60 @@ function fmtExamDate_(v) {
     return Utilities.formatDate(v, 'Asia/Seoul', 'M월 d일');
   }
   return String(v == null ? '' : v);
+}
+
+// ───────── 제출 기록 정리 (omr_admin.html — 중복 제출 삭제용) ─────────
+// 응답 시트 전체를 가벼운 형태로 반환 (답안 45문항은 제외 — 목록·중복 판별에 불필요)
+function responsesList_() {
+  const sh = SS().getSheetByName('응답');
+  if (!sh || sh.getLastRow() < 2) return [];
+  const v = sh.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < v.length; i++) {
+    const r = v[i];
+    if (!r[3]) continue;   // 이름 없는 행 제외
+    out.push({
+      row: i + 1,                        // 시트 실제 행 번호 (삭제용)
+      ts: normRespTs_(r[0]),             // 제출시각 (삭제 대조 키)
+      exam: '' + r[1], name: '' + r[3], school: '' + r[4],
+      grade: '' + r[5], subject: '' + r[6], got: '' + r[7], level: '' + r[9]
+    });
+  }
+  return out;
+}
+
+// 행 번호 + 이름·제출시각 대조 후 삭제 (신청 현황 삭제와 동일한 안전장치 —
+// 목록을 연 뒤 시트가 바뀌어 행이 밀렸으면 지우지 않고 stale 반환)
+function deleteResponse_(p) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = SS().getSheetByName('응답');
+    const row = parseInt(p.row, 10);
+    if (!sh || !row || row < 2 || row > sh.getLastRow()) {
+      return { result: 'error', message: 'stale' };
+    }
+    const r = sh.getRange(row, 1, 1, 4).getValues()[0];
+    const name = String(r[3] || '').trim();
+    const ts = normRespTs_(r[0]);
+    if (!name || name !== String(p.name || '').trim() || !ts || ts !== String(p.ts || '').trim()) {
+      return { result: 'error', message: 'stale' };
+    }
+    sh.deleteRow(row);
+    return { result: 'success' };
+  } catch (err) {
+    return { result: 'error', message: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 제출시각을 대조용 문자열로 정규화 (초 단위까지 — 중복 제출도 구분)
+function normRespTs_(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return Utilities.formatDate(v, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
+  }
+  return String(v == null ? '' : v).trim();
 }
 
 // ───────── 열려 있는 회차 목록 (학생 화면 드롭다운용) ─────────
