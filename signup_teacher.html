@@ -281,24 +281,24 @@
     return isNaN(d) ? null : d;
   }
   function fmtDate(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-  // 신청(수~금)과 응시(토·일)를 한 주차로 묶는다 → 그 주의 수요일을 키로.
+  // 신청(화~금)과 응시(토·일)를 한 주차로 묶는다 → 그 주의 화요일을 키로. (백엔드 weekKey_와 동일)
   function weekStartKey(ts){
     const d = toDate(ts); if(!d) return "";
-    const since = (d.getDay() - 3 + 7) % 7;  // 수요일(3)로부터 지난 날 수
+    const since = (d.getDay() - 2 + 7) % 7;  // 화요일(2)로부터 지난 날 수
     return fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()-since));
   }
-  // 주차 라벨: 그 주 토~일이 실제 응시일
+  // 주차 라벨: 그 주 토~일이 실제 응시일 (토=화+4, 일=화+5)
   function weekLabel(key){
-    const p = key.split("-"); const wed = new Date(+p[0], +p[1]-1, +p[2]);
-    const sat = new Date(wed.getFullYear(), wed.getMonth(), wed.getDate()+3);
-    const sun = new Date(wed.getFullYear(), wed.getMonth(), wed.getDate()+4);
+    const p = key.split("-"); const tue = new Date(+p[0], +p[1]-1, +p[2]);
+    const sat = new Date(tue.getFullYear(), tue.getMonth(), tue.getDate()+4);
+    const sun = new Date(tue.getFullYear(), tue.getMonth(), tue.getDate()+5);
     const md = x => (x.getMonth()+1)+"/"+x.getDate();
     return md(sat)+"·"+md(sun)+" 모의고사";
   }
   function dayDateLabel(key, day){
-    const p = key.split("-"); const wed = new Date(+p[0], +p[1]-1, +p[2]);
-    const off = day==="토요일" ? 3 : 4;
-    const x = new Date(wed.getFullYear(), wed.getMonth(), wed.getDate()+off);
+    const p = key.split("-"); const tue = new Date(+p[0], +p[1]-1, +p[2]);
+    const off = day==="토요일" ? 4 : 5;
+    const x = new Date(tue.getFullYear(), tue.getMonth(), tue.getDate()+off);
     return (x.getMonth()+1)+"월 "+x.getDate()+"일";
   }
 

@@ -17,12 +17,12 @@
  *    새 버전으로 올리면 같은 주소가 유지됩니다.
  * ──────────────────────────────────────────────────────────
  *
- * ── 신청 받기 ON/OFF (매주 수요일 열고 금요일 밤 닫기) ───────
+ * ── 신청 받기 ON/OFF (매주 화요일 열고 금요일 밤 닫기) ───────
  * 교사용 페이지(signup_teacher.html)의 토글 버튼이 아래 두 액션을 씁니다.
  *   - action=status                : 현재 신청 받기 상태 조회
  *   - action=setStatus&open=1|0&pw= : 신청 받기/중단 전환 (비밀번호 필요)
  * 상태는 Script Properties 에 저장되며, 중단 상태에서는 신규
- * 신청 제출(submit)이 막힙니다. 매주 수요일에 '신청 받는 중'으로
+ * 신청 제출(submit)이 막힙니다. 매주 화요일에 '신청 받는 중'으로
  * 켜고, 금요일 밤 11:59 이후 '신청 중단'으로 끄면 됩니다.
  * ──────────────────────────────────────────────────────────
  *
@@ -189,17 +189,18 @@ function dayCounts_() {
   return counts;
 }
 
-// 제출시각을 수요일 시작 주(수~화) 단위 키("yyyy-MM-dd", Asia/Seoul)로 변환.
-// 신청은 수~금, 응시는 같은 주 토·일 → 모두 같은 '수요일 주차'에 묶입니다.
+// 제출시각을 화요일 시작 주(화~월) 단위 키("yyyy-MM-dd", Asia/Seoul)로 변환.
+// 신청은 화~금, 응시는 같은 주 토·일 → 모두 같은 '화요일 주차'에 묶입니다.
+// (2026-07: 수요일 시작 → 화요일 시작으로 변경. 기존 수~금 신청 기록의 주말 배정은 동일하게 유지됨)
 function weekKey_(v) {
   var d = parseTs_(v);
   if (!d) return "";
   var ymd = Utilities.formatDate(d, "Asia/Seoul", "yyyy-MM-dd").split("-");
   var y = +ymd[0], mo = +ymd[1], da = +ymd[2];
   var dow = new Date(Date.UTC(y, mo - 1, da, 12)).getUTCDay(); // 0=일 .. 6=토
-  var since = (dow - 3 + 7) % 7;                               // 수요일(3)로부터 지난 날 수
-  var wed = new Date(Date.UTC(y, mo - 1, da - since, 12));
-  return Utilities.formatDate(wed, "Asia/Seoul", "yyyy-MM-dd");
+  var since = (dow - 2 + 7) % 7;                               // 화요일(2)로부터 지난 날 수
+  var tue = new Date(Date.UTC(y, mo - 1, da - since, 12));
+  return Utilities.formatDate(tue, "Asia/Seoul", "yyyy-MM-dd");
 }
 function parseTs_(v) {
   if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
@@ -209,12 +210,12 @@ function parseTs_(v) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// 주차 키(그 주 수요일)와 요일로 실제 응시 날짜를 만든다.
-// 토요일 = 수요일 + 3일, 일요일 = 수요일 + 4일
+// 주차 키(그 주 화요일)와 요일로 실제 응시 날짜를 만든다.
+// 토요일 = 화요일 + 4일, 일요일 = 화요일 + 5일
 function examDate_(weekKey, day) {
   var p = String(weekKey || "").split("-");
   if (p.length !== 3) return null;
-  var offset = (day === "토요일") ? 3 : (day === "일요일") ? 4 : 0;
+  var offset = (day === "토요일") ? 4 : (day === "일요일") ? 5 : 0;
   return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + offset, 12));
 }
 function examDateLabel_(weekKey, day) {
