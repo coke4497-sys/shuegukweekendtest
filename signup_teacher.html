@@ -712,7 +712,7 @@
     const sat = new Date(tue.getFullYear(), tue.getMonth(), tue.getDate()+4);
     const sun = new Date(tue.getFullYear(), tue.getMonth(), tue.getDate()+5);
     const md = x => (x.getMonth()+1) + "/" + x.getDate();
-    $("obDates").textContent = md(sat) + "(토) · " + md(sun) + "(일) 신청";
+    $("obDates").textContent = md(sat) + "(토) · " + md(sun) + "(일)";
     bn.style.display = "block";
   }
   function toggleOpen(){
