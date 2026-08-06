@@ -27,6 +27,32 @@
 const SS_ID = '1hd1huZpppBue5rlBVMZc2-wAbZ91PitFiBGT12Cq7YQ';
 function SS(){ return SpreadsheetApp.openById(SS_ID); }
 
+/* ── 접속 폭주 대비 (성능) ─────────────────────────────────────
+ *  · respValues_ : '응답' 시트를 한 요청 안에서 1번만 읽는 실행 단위 메모.
+ *  · examJson_   : '회차정답'의 회차 JSON을 120초 캐시 — 성적표를 만들 때마다
+ *    정답 시트 전체를 다시 읽지 않는다. 출제 저장(saveExam_) 시 즉시 갱신. */
+var MEMO_ = {};
+function respValues_() {
+  if (!('resp' in MEMO_)) {
+    const sh = SS().getSheetByName('응답');
+    MEMO_.resp = (!sh || sh.getLastRow() < 2) ? null : sh.getDataRange().getValues();
+  }
+  return MEMO_.resp;
+}
+function examJson_(examName) {
+  const key = 'exam:' + examName;
+  if (key in MEMO_) return MEMO_[key];
+  let hit = null;
+  try { hit = CacheService.getScriptCache().get(key); } catch (e) {}
+  if (hit != null) return (MEMO_[key] = hit);
+  const sh = SS().getSheetByName('회차정답');
+  const rows = sh.getDataRange().getValues();
+  let found = null;
+  for (const r of rows) { if (String(r[0]) === String(examName)) { found = String(r[1]); break; } }
+  if (found != null) { try { CacheService.getScriptCache().put(key, found, 120); } catch (e) {} }
+  return (MEMO_[key] = found);
+}
+
 // ───────── 웹페이지 제공 (학생용 / 선생님용 분기) + 외부 JSON API ─────────
 // 기본 URL → 학생 OMR
 // URL 뒤에 ?page=teacher → 선생님용 성적 관리 화면
@@ -70,10 +96,12 @@ function saveExam_(data) {
   for (let i = 0; i < rows.length; i++) {
     if (String(rows[i][0]).trim() === name) {
       sh.getRange(i + 1, 2).setValue(jsonStr);
+      try { CacheService.getScriptCache().remove('exam:' + name); } catch (e) {}
       return { result: 'success', updated: true };
     }
   }
   sh.appendRow([name, jsonStr]);
+  try { CacheService.getScriptCache().remove('exam:' + name); } catch (e) {}
   return { result: 'success', updated: false };
 }
 
@@ -119,9 +147,8 @@ function studentReports_(id, name, school, uniqFlag) {
   const uniq = String(uniqFlag || '') === '1';
   if (!name) return [];
 
-  const sh = SS().getSheetByName('응답');
-  if (!sh || sh.getLastRow() < 2) return [];
-  const values = sh.getDataRange().getValues();
+  const values = respValues_();
+  if (!values) return [];
   const headers = values[0];
   const idIdx = headers.indexOf('학생ID');   // 없으면 -1
 
@@ -258,29 +285,22 @@ function getExamList() {
 
 // ───────── 특정 회차 데이터 읽기 ─────────
 function loadExamData(examName) {
-  const sh = SS().getSheetByName('회차정답');
-  const rows = sh.getDataRange().getValues();
-  for (const r of rows) {
-    if (String(r[0]) === String(examName)) {
-      return JSON.parse(r[1]);   // { 화법과작문:{...}, 언어와매체:{...} }
-    }
-  }
-  throw new Error('회차를 찾을 수 없습니다: ' + examName);
+  const s = examJson_(examName);   // 120초 캐시 — { 화법과작문:{...}, 언어와매체:{...} }
+  if (s == null) throw new Error('회차를 찾을 수 없습니다: ' + examName);
+  return JSON.parse(s);
 }
 
 // ───────── 학생 제출 → 채점 → 저장 → 성적표 데이터 반환 ─────────
 // 결과를 JSON 문자열로 반환 (웹앱 전송 안전). 화면에서 JSON.parse로 푼다.
+// 전역 잠금 없이 동시 처리 — 채점은 읽기만 하고 저장은 appendRow(줄 추가)라 동시에 해도 안전.
+// (예전엔 30초 잠금 대기 때문에 주말 아침 동시 제출이 줄을 서다 오류가 날 수 있었음)
 function submitOMR(payload) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
   try {
     const report = scoreAndBuild(payload);
     saveResponse(payload, report.result.got, report.result.total, report.result.grade);
     return JSON.stringify(report);
   } catch (err) {
     return JSON.stringify({ ok: false, error: String(err) });
-  } finally {
-    lock.releaseLock();
   }
 }
 
