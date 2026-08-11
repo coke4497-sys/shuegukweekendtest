@@ -98,6 +98,42 @@ function studentKey_(name, school, id) {
   return (name || "") + "|" + (school || "") + "|" + (id || "");
 }
 
+/* ── 접속 폭주 대비 (성능) ─────────────────────────────────────
+ * 학생 개별 페이지가 열릴 때마다 이 서버를 2번(mySignups·days) 호출하는데,
+ * 매번 신청 시트 전체를 읽으면 접속이 몰릴 때 서버가 밀린다.
+ * 읽기 전용 조회(mySignups·days)는 [이름, 학교, 학생ID, 요일, 주차키]만 뽑은
+ * 스냅샷을 60초 캐시해 전 학생이 공유한다. 신청·삭제가 일어나면 즉시 비워
+ * 본인 제출 직후 조회도 바로 반영된다.
+ * (정원 확인이 걸린 제출 처리는 캐시 없이 잠금 안에서 시트를 직접 읽는다) */
+var MEMO_ = {};
+var SNAP_KEY = "signupSnap";
+function signupSnap_() {
+  if (MEMO_[SNAP_KEY]) return MEMO_[SNAP_KEY];
+  try {
+    var hit = CacheService.getScriptCache().get(SNAP_KEY);
+    if (hit) return (MEMO_[SNAP_KEY] = JSON.parse(hit));
+  } catch (e) {}
+  var values = getSheet_().getDataRange().getValues();
+  var headers = values.shift() || [];
+  var iN = headers.indexOf("이름"), iS = headers.indexOf("학교"), iId = headers.indexOf("학생ID"),
+      iDay = headers.indexOf("응시요일"), iT = headers.indexOf("제출시각");
+  var rows = values.map(function (r) {
+    return [
+      iN   >= 0 ? String(r[iN]   == null ? "" : r[iN])   : "",
+      iS   >= 0 ? String(r[iS]   == null ? "" : r[iS])   : "",
+      iId  >= 0 ? String(r[iId]  == null ? "" : r[iId])  : "",
+      iDay >= 0 ? String(r[iDay] == null ? "" : r[iDay]) : "",
+      weekKey_(iT >= 0 ? r[iT] : "")
+    ];
+  });
+  try { CacheService.getScriptCache().put(SNAP_KEY, JSON.stringify(rows), 60); } catch (e) {}
+  return (MEMO_[SNAP_KEY] = rows);
+}
+function clearSignupSnap_() {
+  delete MEMO_[SNAP_KEY];
+  try { CacheService.getScriptCache().remove(SNAP_KEY); } catch (e) {}
+}
+
 // 신청 처리 (정원 확인 후 기록). doPost·doGet 양쪽에서 사용.
 function handleSubmit_(data) {
   var lock = LockService.getScriptLock();
@@ -141,6 +177,7 @@ function handleSubmit_(data) {
     ];
 
     sheet.getRange(sheet.getLastRow() + 1, 1, 1, HEADERS.length).setValues([row]);
+    clearSignupSnap_();
     return { result: "success" };
   } catch (err) {
     return { result: "error", message: String(err) };
@@ -167,22 +204,15 @@ function dayInfo_(sheet, day, week) {
   return { students: students, count: Object.keys(students).length };
 }
 
-// 이번 주차의 요일별 학생 수 (폼에서 마감 표시용)
+// 이번 주차의 요일별 학생 수 (폼에서 마감 표시용) — 스냅샷 사용
 function dayCounts_() {
-  var sheet = getSheet_();
-  var values = sheet.getDataRange().getValues();
-  var headers = values.shift() || [];
-  var iDay = headers.indexOf("응시요일"),
-      iN = headers.indexOf("이름"),
-      iS = headers.indexOf("학교"),
-      iId = headers.indexOf("학생ID"),
-      iT = headers.indexOf("제출시각");
+  var rows = signupSnap_();
   var week = weekKey_(new Date());
   var perDay = {};
-  values.forEach(function (r) {
-    var day = String(r[iDay] || ""); if (DAYS.indexOf(day) === -1) return;
-    if (weekKey_(r[iT]) !== week) return;
-    (perDay[day] = perDay[day] || {})[studentKey_(r[iN], r[iS], r[iId])] = true;
+  rows.forEach(function (r) {
+    var day = r[3]; if (DAYS.indexOf(day) === -1) return;
+    if (r[4] !== week) return;
+    (perDay[day] = perDay[day] || {})[studentKey_(r[0], r[1], r[2])] = true;
   });
   var counts = {};
   DAYS.forEach(function (d) { counts[d] = perDay[d] ? Object.keys(perDay[d]).length : 0; });
@@ -337,6 +367,7 @@ function deleteSignup_(params) {
       return { result: "error", message: "stale" };
     }
     sheet.deleteRow(row);
+    clearSignupSnap_();
     return { result: "success" };
   } catch (err) {
     return { result: "error", message: String(err) };
@@ -369,6 +400,7 @@ function deleteManySignups_(params) {
       sheet.deleteRow(row);
       deleted++;
     });
+    if (deleted) clearSignupSnap_();
     return { result: "success", deleted: deleted, stale: stale };
   } catch (err) {
     return { result: "error", message: String(err) };
@@ -393,21 +425,17 @@ function mySignups_(params) {
   var sid = String(params.id || "").trim();
   var uniq = String(params.uniq || "") === "1";
   if (!name) return { result: "success", signups: [] };
-  var sheet = getSheet_();
-  var values = sheet.getDataRange().getValues();
-  var headers = values.shift() || [];
-  var iN = headers.indexOf("이름"), iS = headers.indexOf("학교"), iId = headers.indexOf("학생ID"),
-      iDay = headers.indexOf("응시요일"), iT = headers.indexOf("제출시각");
+  var rows = signupSnap_();
   var week = weekKey_(new Date());
   var seen = {}, out = [];
-  values.forEach(function (r) {
-    if (String(r[iN] || "").trim() !== name) return;
-    var rs = String(r[iS] || "").trim();
+  rows.forEach(function (r) {
+    if (r[0].trim() !== name) return;
+    var rs = r[1].trim();
     if (school && rs && !schoolMatch_(rs, school)) return;
-    var rid = String(r[iId] || "").replace(/^'/, "").trim();
+    var rid = r[2].replace(/^'/, "").trim();
     if (!uniq && rid && sid && rid !== sid) return; // 동명이인 구분(이름이 유일하면 생략)
-    if (weekKey_(r[iT]) !== week) return;           // 이번 주만
-    var day = String(r[iDay] || "").trim();
+    if (r[4] !== week) return;                      // 이번 주만
+    var day = r[3].trim();
     if (DAYS.indexOf(day) === -1 || seen[day]) return;
     seen[day] = true;                                // 같은 요일 중복 신청은 1건으로
     out.push({ day: day, date: examDateLabel_(week, day) });
