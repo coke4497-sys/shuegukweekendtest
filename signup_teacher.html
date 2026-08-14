@@ -189,7 +189,7 @@
 </style>
 </head>
 <body>
-<div class="gate" id="gate">
+<div class="gate" id="gate" style="display:none;">
   <div class="gate-card">
     <div class="name">이수경국어</div>
     <div class="sub">Shueguk</div>
@@ -330,7 +330,7 @@
 
   let allRows = [];
   let authed = false;
-  let teacherPw = "";
+  let teacherPw = "sh";   // 게이트 제거(2026-08-14) — 백엔드 검증용으로 내장
   let signupOpen = true;
   let weekInitialized = false;
   let weekList = []; // 최근 주가 먼저 (내림차순)
@@ -818,7 +818,9 @@
   }
   $("enter").addEventListener("click", submitPw);
   $("pw").addEventListener("keydown", e => { if (e.key === "Enter") submitPw(); });
-  $("pw").focus();
+  // 비밀번호 게이트 제거 — 바로 데이터 로드 (실패 시에만 게이트 표시)
+  enterApp();
+  fetchData();
 </script>
 </body>
 </html>
