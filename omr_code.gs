@@ -78,6 +78,7 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     if (data.action === 'saveExam') out = saveExam_(data);
+    else if (data.action === 'deleteExam') out = deleteExam_(data);
     else out = { result: 'error', message: 'unknown action' };
   } catch (err) {
     out = { result: 'error', message: String(err) };
@@ -103,6 +104,23 @@ function saveExam_(data) {
   sh.appendRow([name, jsonStr]);
   try { CacheService.getScriptCache().remove('exam:' + name); } catch (e) {}
   return { result: 'success', updated: false };
+}
+// 회차 삭제 — 잘못 저장한 회차 정리용. { action:'deleteExam', pw, name }
+function deleteExam_(data) {
+  if (String(data.pw || '') !== 'sh') return { result: 'error', message: 'unauthorized' };
+  const name = String(data.name || '').trim();
+  if (!name) return { result: 'error', message: '회차 이름이 비어 있습니다.' };
+  const sh = SS().getSheetByName('회차정답');
+  if (!sh) return { result: 'error', message: '회차정답 시트가 없습니다.' };
+  const rows = sh.getDataRange().getValues();
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === name) {
+      sh.deleteRow(i + 1);
+      try { CacheService.getScriptCache().remove('exam:' + name); } catch (e) {}
+      return { result: 'success' };
+    }
+  }
+  return { result: 'error', message: '해당 회차가 없습니다: ' + name };
 }
 
 // ───────── 외부 페이지용 JSON/JSONP API ─────────
