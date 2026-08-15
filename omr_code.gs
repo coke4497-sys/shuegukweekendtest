@@ -78,6 +78,7 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     if (data.action === 'saveExam') out = saveExam_(data);
+    else if (data.action === 'deleteExam') out = deleteExam_(data);
     else out = { result: 'error', message: 'unknown action' };
   } catch (err) {
     out = { result: 'error', message: String(err) };
@@ -103,6 +104,23 @@ function saveExam_(data) {
   sh.appendRow([name, jsonStr]);
   try { CacheService.getScriptCache().remove('exam:' + name); } catch (e) {}
   return { result: 'success', updated: false };
+}
+// 회차 삭제 — 잘못 저장한 회차 정리용. { action:'deleteExam', pw, name }
+function deleteExam_(data) {
+  if (String(data.pw || '') !== 'sh') return { result: 'error', message: 'unauthorized' };
+  const name = String(data.name || '').trim();
+  if (!name) return { result: 'error', message: '회차 이름이 비어 있습니다.' };
+  const sh = SS().getSheetByName('회차정답');
+  if (!sh) return { result: 'error', message: '회차정답 시트가 없습니다.' };
+  const rows = sh.getDataRange().getValues();
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === name) {
+      sh.deleteRow(i + 1);
+      try { CacheService.getScriptCache().remove('exam:' + name); } catch (e) {}
+      return { result: 'success' };
+    }
+  }
+  return { result: 'error', message: '해당 회차가 없습니다: ' + name };
 }
 
 // ───────── 외부 페이지용 JSON/JSONP API ─────────
@@ -282,6 +300,17 @@ function getExamList() {
   const rows = sh.getDataRange().getValues();
   return rows.filter(r => r[0]).map(r => String(r[0]));  // 회차 이름들
 }
+// 회차 이름 + 형식('통합'=1~45 공통, ''=고3형 공통+선택과목).
+// 학생 화면이 통합형 회차에서 선택과목 버튼을 숨기는 데 쓴다.
+// (JSON 전체 파싱 없이 문자열로 판별 — 회차가 많아져도 가볍게)
+function getExamList2() {
+  const sh = SS().getSheetByName('회차정답');
+  const rows = sh.getDataRange().getValues();
+  return rows.filter(r => r[0]).map(r => ({
+    name: String(r[0]),
+    mode: /"mode"\s*:\s*"통합"/.test(String(r[1] || '')) ? '통합' : ''
+  }));
+}
 
 // ───────── 특정 회차 데이터 읽기 ─────────
 function loadExamData(examName) {
@@ -401,9 +430,16 @@ function getReportByRow(rowNum) {
 // ───────── 공통 채점 함수 (제출 즉시 / 나중에 둘 다 사용) ─────────
 function scoreAndBuild(payload) {
   const examPack = loadExamData(payload.examName);
-  const subjectKey = payload.subject === '화법과작문' ? '화법과작문' : '언어와매체';
-  const exam = examPack[subjectKey];
-  if (!exam) throw new Error('선택과목 정답이 없습니다: ' + subjectKey);
+  // 통합형(1~45 공통, 선택과목 없음) 회차면 '통합' 정답 하나로 채점 — 고3형은 기존 그대로
+  let exam;
+  if (examPack['통합']) {
+    exam = examPack['통합'];
+    payload.subject = '공통';
+  } else {
+    const subjectKey = payload.subject === '화법과작문' ? '화법과작문' : '언어와매체';
+    exam = examPack[subjectKey];
+    if (!exam) throw new Error('선택과목 정답이 없습니다: ' + subjectKey);
+  }
 
   const detail = {};
   let total = 0, got = 0;
