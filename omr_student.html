@@ -223,10 +223,12 @@
       <button type="button" data-grade="2" onclick="pickGrade(this)">2학년</button>
       <button type="button" data-grade="3" onclick="pickGrade(this)">3학년</button>
     </div>
-    <label>선택과목</label>
-    <div class="subj">
-      <button type="button" data-subj="화법과작문" onclick="pickSubj(this)">화법과작문</button>
-      <button type="button" data-subj="언어와매체" onclick="pickSubj(this)">언어와매체</button>
+    <div id="subjWrap">
+      <label>선택과목</label>
+      <div class="subj">
+        <button type="button" data-subj="화법과작문" onclick="pickSubj(this)">화법과작문</button>
+        <button type="button" data-subj="언어와매체" onclick="pickSubj(this)">언어와매체</button>
+      </div>
     </div>
   </div>
 
@@ -259,16 +261,20 @@
 
 <script>
   const TOTAL = 45;
-  // 영역 구분 (성적표 큰 분류와 일치)
+  // 영역 구분 (성적표 큰 분류와 일치) — 고3형(공통+선택과목)
   const SECTIONS = [
     { name:'독서론',  from:1,  to:3  },
     { name:'독서',    from:4,  to:17 },
     { name:'문학',    from:18, to:34 },
     { name:'선택과목', from:35, to:45, select:true }
   ];
+  // 통합형(고1·고2식) — 1~45 전체 공통, 선택과목 없음
+  const SECTIONS_INT = [ { name:'공통', from:1, to:45 } ];
   const picks = {};
   let subject = null;
   let grade = null;
+  let examModes = {};      // 회차 이름 → '통합' | '' (고3형)
+  let integrated = false;  // 지금 고른 회차가 통합형인지
 
   // 응시일 드롭다운 채우기 (월 1~12, 일 1~31)
   (function fillDate(){
@@ -286,15 +292,36 @@
   }
   (function loadExams(){
     if(window.google && google.script && google.script.run){
-      // 실제 환경: 스프레드시트의 회차정답 시트에서 목록을 가져옴
-      google.script.run.withSuccessHandler(fillExamList)
-        .withFailureHandler(()=>toast('회차 목록을 불러오지 못했습니다'))
-        .getExamList();
+      // 실제 환경: 회차 이름 + 형식(통합/고3형)을 함께 가져옴
+      google.script.run.withSuccessHandler(function(list){
+        examModes = {};
+        list.forEach(x=>{ examModes[x.name]=x.mode||''; });
+        fillExamList(list.map(x=>x.name));
+      })
+      .withFailureHandler(function(){
+        // 옛 백엔드(형식 정보 없음) — 이름만 받아 고3형으로 취급
+        google.script.run.withSuccessHandler(fillExamList)
+          .withFailureHandler(()=>toast('회차 목록을 불러오지 못했습니다'))
+          .getExamList();
+      })
+      .getExamList2();
     }else{
       // 로컬 데모: 임시 목록
-      fillExamList(['상상3-4회차','상상3-5회차']);
+      examModes = { '상상3-4회차':'', '통합1회차':'통합' };
+      fillExamList(['상상3-4회차','통합1회차']);
     }
   })();
+
+  // 회차를 고르면 그 형식(통합/고3형)에 맞게 화면 전환
+  document.getElementById('exam').addEventListener('change', function(){
+    const wasIntegrated = integrated;
+    integrated = (examModes[this.value] === '통합');
+    if (integrated === wasIntegrated) return;
+    document.getElementById('subjWrap').style.display = integrated ? 'none' : '';
+    if (integrated) subject = '공통';
+    else { const on=document.querySelector('#subjWrap .subj button.on'); subject = on ? on.dataset.subj : null; }
+    buildQuiz(integrated ? SECTIONS_INT : SECTIONS);   // 답안(picks)은 유지된 채 구획만 다시 그림
+  });
 
   // 문항 한 개 생성
   function makeQ(i){
@@ -311,22 +338,31 @@
     return q;
   }
 
-  // 영역별 섹션 렌더링
-  function buildQuiz(){
+  // 영역별 섹션 렌더링 — 형식이 바뀌면 다시 그리되, 이미 고른 답안(picks)은 복원한다
+  function buildQuiz(sections){
     const quiz=document.getElementById('quiz');
-    SECTIONS.forEach(sec=>{
+    quiz.innerHTML='';
+    (sections||SECTIONS).forEach(sec=>{
       const label=document.createElement('div');
       label.className='sec-label';
       if(sec.select){
-        label.innerHTML=`선택 · <span id="subjLabel" style="flex:0;color:var(--accent-d)">과목 미선택</span> ${sec.from}–${sec.to}<span></span>`;
+        label.innerHTML=`선택 · <span id="subjLabel" style="flex:0;color:var(--accent-d)">${subject||'과목 미선택'}</span> ${sec.from}–${sec.to}<span></span>`;
       }else{
         label.innerHTML=`${sec.name} ${sec.from}–${sec.to}<span></span>`;
       }
       quiz.appendChild(label);
       for(let i=sec.from;i<=sec.to;i++) quiz.appendChild(makeQ(i));
     });
+    // 고른 답안 복원
+    Object.keys(picks).forEach(function(i){
+      const q=document.getElementById('q'+i); if(!q) return;
+      const ch=q.querySelector('.choices');
+      ch.children[picks[i]-1].classList.add('sel');
+      q.classList.add('answered');
+    });
+    updateProgress();
   }
-  buildQuiz();
+  buildQuiz(SECTIONS);
 
   function choose(i,j,ch,q){
     picks[i]=j;
@@ -389,7 +425,7 @@
     if(!school){ toast('학교를 입력해 주세요'); document.getElementById('school').focus(); return; }
     if(!/^\d{8}$/.test(studentId)){ toast('학부모님 연락처 8자리를 입력해 주세요 (010 제외)'); document.getElementById('parentPhone').focus(); return; }
     if(!grade){ toast('학년을 선택해 주세요'); window.scrollTo({top:0,behavior:'smooth'}); return; }
-    if(!subject){ toast('선택과목을 골라 주세요'); window.scrollTo({top:0,behavior:'smooth'}); return; }
+    if(!integrated && !subject){ toast('선택과목을 골라 주세요'); window.scrollTo({top:0,behavior:'smooth'}); return; }
 
     const missing=[];
     for(let i=1;i<=TOTAL;i++) if(!picks[i]) missing.push(i);
