@@ -134,6 +134,26 @@ function clearSignupSnap_() {
   try { CacheService.getScriptCache().remove(SNAP_KEY); } catch (e) {}
 }
 
+/* 게이트 미러 — 신청받기·가능 학년을 시트 '설정' 탭에 기록해 둔다.
+ * 리포트 서버(학생 개별 페이지)가 이 시트를 직접 읽어 학생마다 이 서버를
+ * 부르지 않게 하기 위한 것. 값이 바뀔 때만 쓴다. (2026-08-19 접속 지연 대책) */
+var GATE_TAB = "설정";
+function mirrorGate_() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(GATE_TAB) || ss.insertSheet(GATE_TAB);
+    var open = isOpen_() ? "1" : "0";
+    var grades = JSON.stringify(getActiveGrades_());
+    var cur = sh.getRange(1, 1, 2, 2).getValues();
+    if (String(cur[0][0]) !== "신청받기" || String(cur[0][1]) !== open ||
+        String(cur[1][0]) !== "신청가능학년" || String(cur[1][1]) !== grades) {
+      var rg = sh.getRange(1, 1, 2, 2);
+      rg.setNumberFormat("@");
+      rg.setValues([["신청받기", open], ["신청가능학년", grades]]);
+    }
+  } catch (e) {}
+}
+
 // 신청 처리 (정원 확인 후 기록). doPost·doGet 양쪽에서 사용.
 function handleSubmit_(data) {
   var lock = LockService.getScriptLock();
@@ -264,6 +284,7 @@ function doGet(e) {
 
   // 폼: 이번 주차의 요일별 마감 여부 + 실제 응시 날짜 조회 (개인정보 없음)
   if (params.action === "days") {
+    mirrorGate_();
     var week = weekKey_(new Date());
     var dates = {};
     DAYS.forEach(function (d) { dates[d] = { label: examDateLabel_(week, d), iso: examDateISO_(week, d) }; });
@@ -286,6 +307,7 @@ function doGet(e) {
     }
     var open = (params.open === "1" || params.open === "true");
     setOpen_(open);
+    mirrorGate_();
     return reply_(params.callback, { result: "success", open: open });
   }
 
@@ -296,7 +318,9 @@ function doGet(e) {
     }
     var gsel = [];
     try { gsel = params.grades ? JSON.parse(params.grades) : []; } catch (e) { gsel = []; }
-    return reply_(params.callback, { result: "success", grades: setActiveGrades_(gsel) });
+    var applied = setActiveGrades_(gsel);
+    mirrorGate_();
+    return reply_(params.callback, { result: "success", grades: applied });
   }
 
   // 학생 개별 페이지: 이 학생의 '이번 주' 신청 내역 (본인 것만 반환)
