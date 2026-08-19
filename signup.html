@@ -245,12 +245,30 @@
   setupChoices("grade");
   setupChoices("subject");
 
+  /* 학생 개별 페이지에서 넘어오면 이름·학교·학년·8자리 자동 입력 (s.html이 nm·sc·gr·sid를 실어 보냄).
+     받은 값은 이 기기에 저장해 두어, 다음에 신청 페이지를 바로 열어도 자동으로 채워진다. */
+  var URL_GRADE = "";
+  (function prefillStudent(){
+    var q = new URLSearchParams(location.search);
+    var info = { nm:(q.get("nm")||"").trim(), sc:(q.get("sc")||"").trim(),
+                 gr:(q.get("gr")||"").trim(), sid:(q.get("sid")||"").trim() };
+    if (info.nm){
+      try { localStorage.setItem("signup_student", JSON.stringify(info)); } catch(e){}
+    } else {
+      try { info = JSON.parse(localStorage.getItem("signup_student")||"{}") || {}; } catch(e){ info = {}; }
+    }
+    if (info.nm) document.getElementById("name").value = info.nm;
+    if (info.sc) document.getElementById("school").value = info.sc;
+    if (/^\d{7,8}$/.test(info.sid||"")) document.getElementById("id").value = info.sid;
+    URL_GRADE = info.gr || "";
+  })();
+
   // 신청 가능 학년 버튼을 동적으로 생성 (기본: 고3만. 서버 설정으로 고1·고2 추가 가능)
   var GRADE_LABEL = { "1":"1학년", "2":"2학년", "3":"3학년" };
   function buildGradeChoices(grades){
     grades = (grades && grades.length) ? grades : ["3"];
     var g = document.getElementById("grade");
-    var prev = g.dataset.val || "";
+    var prev = g.dataset.val || URL_GRADE || "";   // 학생 페이지에서 넘어온 학년을 기본 선택
     g.innerHTML = grades.map(function(v){
       return '<button type="button" data-val="'+v+'">'+(GRADE_LABEL[v]||v+"학년")+'</button>';
     }).join("");
@@ -366,6 +384,7 @@
       return;
     }
 
+    try { localStorage.setItem("signup_student", JSON.stringify({ nm:name, sc:school, gr:grade, sid:id })); } catch(e){}
     jsonpRequest({
       action: "submit", name, school, grade, id, subject, day
     }, function(resp){
