@@ -411,6 +411,7 @@
       renderOpenState();
       if (resp.grades) setGradeUI(resp.grades);
       allRows = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
+      sbResyncSignup(allRows);
       $("updated").textContent = "업데이트 " + new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
       setState("", false);
       buildFilters();
@@ -428,6 +429,45 @@
                + "&pw=" + encodeURIComponent(teacherPw)
                + "&callback=" + cb + "&t=" + Date.now();
     document.body.appendChild(script);
+  }
+
+  
+  /* ── 수파베이스 미러 재동기화 (2026-08-23 DB 이전) — 교사 화면이 목록을 읽을 때마다
+   * 신청 미러(signup_entries)를 시트 내용으로 통째 교체(삭제·정리 반영). 실패 무해. */
+  const SB_REST = "https://bangdbhqpphqqdwcledg.supabase.co/rest/v1";
+  const SB_KEY = "sb_publishable_dE9d1KIbpgYaQkaS2MSrlg_-7SiRJuT";
+  function sbP2(n){ return String(n).padStart(2, "0"); }
+  function sbNormTs(v){
+    const s = String(v == null ? "" : v).trim();
+    if (!s) return "";
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) return s.slice(0, 16);
+    const tm = Date.parse(s);
+    if (isNaN(tm)) return s;
+    const d = new Date(tm + 9 * 3600000);
+    return d.getUTCFullYear() + "-" + sbP2(d.getUTCMonth()+1) + "-" + sbP2(d.getUTCDate()) +
+           " " + sbP2(d.getUTCHours()) + ":" + sbP2(d.getUTCMinutes());
+  }
+  function sbNormDate(v){
+    const s = String(v == null ? "" : v).trim();
+    if (!s || (s.indexOf("월") >= 0 && s.indexOf("일") >= 0)) return s;
+    const tm = Date.parse(s);
+    if (isNaN(tm)) return s;
+    const d = new Date(tm + 9 * 3600000);
+    return (d.getUTCMonth()+1) + "월 " + d.getUTCDate() + "일";
+  }
+  function sbResyncSignup(rows){
+    try {
+      const H = { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY,
+                  "Content-Type": "application/json", "Prefer": "return=minimal" };
+      const body = (rows || []).map(r => ({
+        ts: sbNormTs(r["제출시각"]), name: String(r["이름"] || ""), school: String(r["학교"] || ""),
+        grade: String(r["학년"] == null ? "" : r["학년"]), student_id: String(r["학생ID"] || ""),
+        subject: String(r["선택과목"] || ""), day: String(r["응시요일"] || ""),
+        exam_date: sbNormDate(r["응시일자"]) }));
+      fetch(SB_REST + "/signup_entries?id=gt.0", { method: "DELETE", headers: H })
+        .then(() => body.length ? fetch(SB_REST + "/signup_entries", { method: "POST", headers: H, body: JSON.stringify(body) }) : null)
+        .catch(e => console.warn("신청 미러 재동기화 실패 — 일일 점검이 복구", e));
+    } catch (e) {}
   }
 
   function studentKey(r){ return (r["이름"]||"") + "|" + (r["학교"]||"") + "|" + (r["학생ID"]||""); }
