@@ -217,6 +217,28 @@
   let dayDates = {};   // { 토요일:{label,iso}, 일요일:{...} }
   let dayList = ["토요일", "일요일"];
 
+  
+  /* ── 수파베이스 미러 (2026-08-23 DB 이전) — 신청 성공 시 미러에도 한 줄 추가.
+   * 실패해도 신청에는 영향 없음(교사 화면 열람·일일 점검이 다시 맞춘다). */
+  const SB_REST = "https://bangdbhqpphqqdwcledg.supabase.co/rest/v1";
+  const SB_KEY = "sb_publishable_dE9d1KIbpgYaQkaS2MSrlg_-7SiRJuT";
+  function sbP2(n){ return String(n).padStart(2, "0"); }
+  function sbMirrorSignup(p){
+    try {
+      const d = new Date(Date.now() + 9 * 3600000);
+      const ts = d.getUTCFullYear() + "-" + sbP2(d.getUTCMonth()+1) + "-" + sbP2(d.getUTCDate()) +
+                 " " + sbP2(d.getUTCHours()) + ":" + sbP2(d.getUTCMinutes());
+      const label = (dayDates && dayDates[p.day] && dayDates[p.day].label) || "";
+      fetch(SB_REST + "/signup_entries", {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY,
+                   "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({ ts: ts, name: p.name || "", school: p.school || "", grade: String(p.grade || ""),
+                               student_id: p.id || "", subject: p.subject || "", day: p.day || "", exam_date: label })
+      }).catch(function(e){ console.warn("신청 미러 실패 — 교사 화면 열람 시 복구", e); });
+    } catch (e) {}
+  }
+
   function apiReady(){ return SCRIPT_URL && SCRIPT_URL.indexOf("script.google.com") !== -1; }
 
   // Apps Script 응답을 읽기 위한 JSONP 요청
@@ -389,6 +411,7 @@
       action: "submit", name, school, grade, id, subject, day
     }, function(resp){
       if (resp && resp.result === "success"){
+        sbMirrorSignup({ name, school, grade, id, subject, day });
         finishOk();
       } else if (resp && resp.result === "full"){
         btn.disabled = false; btn.textContent = "신청하기";
