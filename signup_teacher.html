@@ -412,6 +412,7 @@
       if (resp.grades) setGradeUI(resp.grades);
       allRows = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
       sbResyncSignup(allRows);
+      sbSyncSettings(resp.open, resp.grades);
       $("updated").textContent = "업데이트 " + new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
       setState("", false);
       buildFilters();
@@ -467,6 +468,30 @@
       fetch(SB_REST + "/signup_entries?id=gt.0", { method: "DELETE", headers: H })
         .then(() => body.length ? fetch(SB_REST + "/signup_entries", { method: "POST", headers: H, body: JSON.stringify(body) }) : null)
         .catch(e => console.warn("신청 미러 재동기화 실패 — 일일 점검이 복구", e));
+    } catch (e) {}
+  }
+
+  /* 신청 설정 미러(signup_settings) — 학생 개별 페이지가 이 두 값 때문에 열릴 때마다
+   * 신청 백엔드를 부르던 것을 없애기 위한 것(2026-08-25 1단계). 원본은 이 백엔드다.
+   * 값이 바뀔 때만 쓴다. 실패해도 무해 — 일일 점검이 맞춘다. */
+  let sbSetLast = "";
+  function sbSyncSettings(open, grades){
+    try {
+      if (typeof open === "undefined" && !grades) return;
+      const body = [];
+      if (typeof open !== "undefined") body.push({ key: "open", value: !!open });
+      if (grades) body.push({ key: "grades", value: (grades || []).map(String) });
+      if (!body.length) return;
+      const sig = JSON.stringify(body);
+      if (sig === sbSetLast) return;          // 같은 값이면 다시 쓰지 않는다
+      sbSetLast = sig;
+      fetch(SB_REST + "/signup_settings?on_conflict=key", {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY,
+                   "Content-Type": "application/json",
+                   "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: sig
+      }).catch(e => { sbSetLast = ""; console.warn("신청 설정 미러 실패 — 일일 점검이 복구", e); });
     } catch (e) {}
   }
 
@@ -789,6 +814,7 @@
       if (finish()) return;
       if (resp && resp.result === "success"){
         signupOpen = !!resp.open; renderOpenState();
+        sbSyncSettings(resp.open);
       } else {
         btn.textContent = prev;
         alert(resp && resp.message === "unauthorized"
@@ -839,7 +865,7 @@
     var timer = setTimeout(function(){ if(finish()) return; msg.textContent="응답 없음 — 재배포 확인"; }, 8000);
     window[cb] = function(resp){
       if(finish()) return;
-      if(resp && resp.result==="success"){ setGradeUI(resp.grades); msg.textContent="저장됨 ✓"; setTimeout(function(){ msg.textContent=""; }, 1500); }
+      if(resp && resp.result==="success"){ setGradeUI(resp.grades); sbSyncSettings(undefined, resp.grades); msg.textContent="저장됨 ✓"; setTimeout(function(){ msg.textContent=""; }, 1500); }
       else { msg.textContent = (resp && resp.message==="unauthorized") ? "권한 없음" : "저장 실패"; }
     };
     script.onerror = function(){ if(finish()) return; msg.textContent="저장 실패 — 인터넷 확인"; };
