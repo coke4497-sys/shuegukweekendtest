@@ -229,12 +229,14 @@
       const ts = d.getUTCFullYear() + "-" + sbP2(d.getUTCMonth()+1) + "-" + sbP2(d.getUTCDate()) +
                  " " + sbP2(d.getUTCHours()) + ":" + sbP2(d.getUTCMinutes());
       const label = (dayDates && dayDates[p.day] && dayDates[p.day].label) || "";
-      fetch(SB_REST + "/signup_entries", {
+      // 표에 직접 넣지 않고 '넣기 전용' 함수를 부른다 — 학생이 여는 페이지라
+      // 공개 키에 표 권한을 열어 둘 수 없다(013 마이그레이션, 2026-08-25)
+      fetch(SB_REST + "/rpc/mirror_signup_entry", {
         method: "POST",
         headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY,
-                   "Content-Type": "application/json", "Prefer": "return=minimal" },
-        body: JSON.stringify({ ts: ts, name: p.name || "", school: p.school || "", grade: String(p.grade || ""),
-                               student_id: p.id || "", subject: p.subject || "", day: p.day || "", exam_date: label })
+                   "Content-Type": "application/json" },
+        body: JSON.stringify({ p: { ts: ts, name: p.name || "", school: p.school || "", grade: String(p.grade || ""),
+                               student_id: p.id || "", subject: p.subject || "", day: p.day || "", exam_date: label } })
       }).catch(function(e){ console.warn("신청 미러 실패 — 교사 화면 열람 시 복구", e); });
     } catch (e) {}
   }
