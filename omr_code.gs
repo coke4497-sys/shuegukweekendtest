@@ -61,13 +61,27 @@ function doGet(e) {
   const p = (e && e.parameter) ? e.parameter : {};
   if (p.action) return apiResponse_(p);   // ★ 외부 페이지용 데이터 API
 
+  // 2026-08-26 수파베이스 전환: 학생 OMR·성적 관리 화면이 정적 페이지로 옮겨 갔다.
+  // 옛 주소(exec)로 직접 들어온 경우 새 페이지로 안내한다(옛 화면을 계속 두면
+  // 제출이 시트에만 남아 원본(수파베이스)에서 빠진다).
   const page = p.page || 'student';
-  const file = (page === 'teacher') ? 'teacher' : 'omr_student';
-  const title = (page === 'teacher') ? '이수경국어 · 성적 관리' : '이수경국어 OMR';
-  return HtmlService.createHtmlOutputFromFile(file)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setTitle(title)
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);  // ← iframe 허용(파란 띠 제거용)
+  const dest = (page === 'teacher')
+    ? 'https://coke4497-sys.github.io/shueguk-hub/omr_teacher.html'
+    : 'https://coke4497-sys.github.io/shueguk-hub/omr.html';
+  const qs = [];
+  ['name', 'school', 'grade', 'sid'].forEach(function (k) {
+    if (p[k]) qs.push(k + '=' + encodeURIComponent(p[k]));
+  });
+  const url = dest + (qs.length ? '?' + qs.join('&') : '');
+  const html = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<base target="_top"><meta http-equiv="refresh" content="0; url=' + url + '">' +
+    '</head><body style="font-family:sans-serif;padding:40px;text-align:center;">' +
+    '페이지가 새 주소로 옮겨 갔어요. 잠시 후 자동으로 이동합니다.<br><br>' +
+    '<a href="' + url + '" target="_top">바로 가기</a></body></html>';
+  return HtmlService.createHtmlOutput(html)
+    .setTitle((page === 'teacher') ? '이수경국어 · 성적 관리' : '이수경국어 OMR')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 // ───────── 출제 저장 (answer_key.html '시트에 바로 저장' 버튼) ─────────
@@ -79,6 +93,12 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     if (data.action === 'saveExam') out = saveExam_(data);
     else if (data.action === 'deleteExam') out = deleteExam_(data);
+    else if (data.action === 'submit') {
+      // 정적 OMR 페이지(shueguk-hub omr.html)의 **시트 사본 기록** (2026-08-26 수파베이스 전환).
+      // 원본 기록·성적표는 수파베이스(omr_submit 함수)가 담당 — 여기는 응답 시트에 같은
+      // 내용을 남기는 이중 기록이다(응답은 페이지가 읽지 않음, no-cors 전송).
+      out = JSON.parse(submitOMR(data.payload || {}));
+    }
     else out = { result: 'error', message: 'unknown action' };
   } catch (err) {
     out = { result: 'error', message: String(err) };
