@@ -313,21 +313,35 @@
   var T_PW = 'shg_FCePWvnawH44SV8kYB9BHRKi6aag';
   var tok = null, until = 0, pending = null;
   var raw = window.fetch.bind(window);
+  var TOK_LS = 'sb_teacher_tok_v1';   // 받아 둔 신분증은 브라우저에 남겨 다음 페이지에서 다시 받지 않는다(1시간짜리)
 
+  function cachedTok(){
+    try {
+      var c = JSON.parse(localStorage.getItem(TOK_LS) || 'null');
+      if (c && c.t && c.u > Date.now()){ tok = c.t; until = c.u; return true; }
+    } catch(e){}
+    return false;
+  }
   function auth(){
     if (tok && Date.now() < until) return Promise.resolve(tok);
+    if (cachedTok()) return Promise.resolve(tok);
     if (pending) return pending;
-    pending = raw(SB_URL + '/auth/v1/token?grant_type=password', {
+    var req = raw(SB_URL + '/auth/v1/token?grant_type=password', {
       method: 'POST',
       headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: T_ID, password: T_PW })
     }).then(function(r){ return r.json(); }).then(function(d){
-      pending = null;
       if (!d || !d.access_token) throw new Error('teacher auth');
       tok = d.access_token;
       until = Date.now() + Math.max(60, (d.expires_in || 3600) - 300) * 1000;   // 만료 5분 전에 다시 받는다
+      try { localStorage.setItem(TOK_LS, JSON.stringify({ t: tok, u: until })); } catch(e){}
       return tok;
-    }, function(e){ pending = null; throw e; });
+    });
+    /* 로그인이 멈춰 있으면 이 아래 모든 조회가 함께 멈춘다 — 10초를 넘기면 실패로 보고
+     * 그 조회는 예전 방식(공개 키)으로 내보낸다. 다음 호출 때 다시 받는다. */
+    var late = new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('teacher auth timeout')); }, 10000); });
+    pending = Promise.race([req, late]).then(function(t){ pending = null; return t; },
+                                            function(e){ pending = null; throw e; });
     return pending;
   }
   function withAuth(url, opts, t){
@@ -347,6 +361,7 @@
       return raw(url, withAuth(url, opts, t)).then(function(r){
         if (r.status !== 401) return r;
         tok = null; until = 0;                       // 만료가 겹쳤으면 한 번만 다시 받아 재시도
+        try { localStorage.removeItem(TOK_LS); } catch(e){}
         return auth().then(function(t2){ return raw(url, withAuth(url, opts, t2)); });
       });
     }, function(){ return raw(url, opts); });
@@ -398,6 +413,10 @@
    * 미러(수파베이스)에는 같은 내용이 있으므로 그걸로 먼저 그리고, 원본은 뒤에서 받는다.
    * 삭제는 시트의 행 번호(_row)가 있어야 하므로 원본이 오기 전에는 잠가 둔다. */
   let SHEET_READY = false, FAST_DRAWN = false;
+  /* 화면에 그려진 목록의 출처 — 0 없음 / 1 지난 목록(이 브라우저에 저장해 둔 것) /
+   * 2 미러(수파베이스) / 3 원본(신청 시트). 늘 더 확실한 쪽이 이긴다. */
+  let DRAWN = 0;
+  const SG_CACHE = "sg_signup_rows_v1";
   let authed = false;
   let teacherPw = "sh";   // 게이트 제거(2026-08-14) — 백엔드 검증용으로 내장
   let signupOpen = true;
@@ -412,6 +431,37 @@
     s.className = "state" + (isErr ? " err" : "");
     $("dashboard").style.display = msg ? "none" : "block";
   }
+  /* 목록을 화면에 올린다 — 이미 더 확실한 출처로 그려져 있으면 무시한다 */
+  function sgDraw(rows, rank, note){
+    if (rank <= DRAWN) return;
+    DRAWN = rank; FAST_DRAWN = (rank < 3);
+    allRows = rows;
+    setState("", false);
+    if (note) $("updated").textContent = note;
+    buildFilters();
+    render();
+  }
+  /* 마지막으로 본 목록을 이 브라우저에 남겨 둔다 — 다음에 열 때 기다리지 않고 바로 보이게.
+   * 여기 담긴 것은 이미 이 화면에 떠 있던 내용이고, 삭제는 원본이 와야 풀린다(_row). */
+  function sgCacheSave(rows, open, grades){
+    try {
+      localStorage.setItem(SG_CACHE, JSON.stringify({
+        at: Date.now(), rows: rows,
+        open: (typeof open === "undefined" ? null : !!open),
+        grades: grades || null }));
+    } catch(e){}
+  }
+  function sgCacheDraw(){
+    try {
+      const c = JSON.parse(localStorage.getItem(SG_CACHE) || "null");
+      if (!c || !c.rows || !c.rows.length) return;
+      if (Date.now() - (c.at || 0) > 14 * 86400000) return;     // 2주 넘게 지난 것은 쓰지 않는다
+      if (c.open !== null && typeof c.open !== "undefined"){ signupOpen = !!c.open; renderOpenState(); }
+      if (Array.isArray(c.grades)) setGradeUI(c.grades.map(String));
+      sgDraw(c.rows.map(r => Object.assign({}, r, { _row: "" })), 1, "지난 목록 · 최신 확인 중…");
+    } catch(e){}
+  }
+
   function showGate(errMsg){
     authed = false;
     $("gate").style.display = "block";
@@ -486,13 +536,12 @@
       renderOpenState();
       if (resp.grades) setGradeUI(resp.grades);
       SHEET_READY = true;
-      allRows = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
-      sbResyncSignup(allRows);
+      const fresh = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
+      sbResyncSignup(fresh);
       sbSyncSettings(resp.open, resp.grades);
-      $("updated").textContent = "업데이트 " + new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
-      setState("", false);
-      buildFilters();
-      render();
+      sgCacheSave(fresh, resp.open, resp.grades);
+      DRAWN = 2;                                     // 원본이 왔으니 무조건 이쪽으로 다시 그린다
+      sgDraw(fresh, 3, "업데이트 " + new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}));
     };
     script.onerror = function(){
       if (settled) return; settled = true; clearTimeout(slowTimer);
@@ -532,18 +581,48 @@
     const d = new Date(tm + 9 * 3600000);
     return (d.getUTCMonth()+1) + "월 " + d.getUTCDate() + "일";
   }
+  function sbRowObj(r){
+    return { ts: sbNormTs(r["제출시각"]), name: String(r["이름"] || ""), school: String(r["학교"] || ""),
+             grade: String(r["학년"] == null ? "" : r["학년"]), student_id: String(r["학생ID"] || ""),
+             subject: String(r["선택과목"] || ""), day: String(r["응시요일"] || ""),
+             exam_date: sbNormDate(r["응시일자"]) };
+  }
+  function sbSig(o){
+    return [o.ts, o.name, o.school, o.grade, o.student_id, o.subject, o.day, o.exam_date]
+      .map(v => String(v == null ? "" : v)).join("\u0001");
+  }
+  let sbMirrorNow = null;   // sbLoadFast 가 방금 받아 둔 미러 줄(id 포함) — 있으면 다시 받지 않는다
+
+  /* 예전에는 페이지를 열 때마다 미러를 통째로 지우고(DELETE id=gt.0) 다시 넣었다.
+   * 그 사이 미러가 **비어 있는 순간**이 있어서, 하필 그때 이 페이지를 열면(다른 탭·새로고침)
+   * 미러로 그리지 못하고 느린 원본 조회를 그대로 기다렸다 — '여전히 느리다'의 원인.
+   * 이제 시트와 미러가 같으면 아무것도 쓰지 않고, 다를 때만 **새 줄을 먼저 넣고 옛 줄을 지운다**. */
   function sbResyncSignup(rows){
     try {
-      const H = { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY,
-                  "Content-Type": "application/json", "Prefer": "return=minimal" };
-      const body = (rows || []).map(r => ({
-        ts: sbNormTs(r["제출시각"]), name: String(r["이름"] || ""), school: String(r["학교"] || ""),
-        grade: String(r["학년"] == null ? "" : r["학년"]), student_id: String(r["학생ID"] || ""),
-        subject: String(r["선택과목"] || ""), day: String(r["응시요일"] || ""),
-        exam_date: sbNormDate(r["응시일자"]) }));
-      fetch(SB_REST + "/signup_entries?id=gt.0", { method: "DELETE", headers: H })
-        .then(() => body.length ? fetch(SB_REST + "/signup_entries", { method: "POST", headers: H, body: JSON.stringify(body) }) : null)
-        .catch(e => console.warn("신청 미러 재동기화 실패 — 일일 점검이 복구", e));
+      const want = (rows || []).map(sbRowObj);
+      const had = sbMirrorNow; sbMirrorNow = null;          // 한 번만 쓴다(쓰고 나면 옛것이 되므로)
+      const cur = had ? Promise.resolve(had)
+        : fetch(SB_REST + "/signup_entries?select=id,ts,name,school,grade,student_id,subject,day,exam_date&order=id.asc&limit=5000",
+                { headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY }, cache: "no-store" })
+            .then(r => r.ok ? r.json() : []);
+      cur.then(function(have){
+        have = have || [];
+        const a = have.map(sbSig).slice().sort().join("\n");
+        const b = want.map(sbSig).slice().sort().join("\n");
+        if (a === b) return null;                            // 같으면 손대지 않는다(대부분 이 경우)
+        const H = { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY,
+                    "Content-Type": "application/json", "Prefer": "return=minimal" };
+        let maxOld = 0;
+        have.forEach(function(r){ const n = Number(r.id); if (n > maxOld) maxOld = n; });
+        const put = want.length
+          ? fetch(SB_REST + "/signup_entries", { method: "POST", headers: H, body: JSON.stringify(want) })
+          : Promise.resolve(null);
+        return put.then(function(){
+          if (!maxOld) return null;                          // 지울 옛 줄이 없다
+          // 새로 넣은 줄은 번호가 maxOld 보다 크다 — 그 이하만 지우면 새 줄은 남는다
+          return fetch(SB_REST + "/signup_entries?id=lte." + maxOld, { method: "DELETE", headers: H });
+        });
+      }).catch(e => console.warn("신청 미러 재동기화 실패 — 일일 점검이 복구", e));
     } catch (e) {}
   }
 
@@ -574,7 +653,7 @@
   /* 미러로 먼저 그리기 — 원본이 오면 그쪽이 이깁니다(SHEET_READY). 실패해도 무해. */
   function sbLoadFast(){
     const H = { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY };
-    const q = "/signup_entries?select=ts,name,school,grade,student_id,subject,day,exam_date&order=id.asc&limit=5000";
+    const q = "/signup_entries?select=id,ts,name,school,grade,student_id,subject,day,exam_date&order=id.asc&limit=5000";
     Promise.all([
       fetch(SB_REST + q, { headers: H, cache: "no-store" })
         .then(r => r.ok ? r.json() : Promise.reject(new Error("sb " + r.status))),
@@ -582,20 +661,16 @@
         .then(r => r.ok ? r.json() : []).catch(() => [])
     ]).then(function(res){
       const rows = res[0], set = res[1];
+      sbMirrorNow = rows;                           // 재동기화가 다시 받지 않도록 넘겨 둔다
       if (SHEET_READY || !rows.length) return;      // 원본이 이미 왔으면 건드리지 않는다
       const cfg = {}; (set || []).forEach(c => { cfg[c.key] = c.value; });
       if (typeof cfg.open !== "undefined"){ signupOpen = !!cfg.open; renderOpenState(); }
       if (Array.isArray(cfg.grades)) setGradeUI(cfg.grades.map(String));
-      allRows = rows.map(r => ({
+      sgDraw(rows.map(r => ({
         "제출시각": r.ts, "이름": r.name, "학교": r.school, "학년": r.grade,
         "학생ID": r.student_id, "선택과목": r.subject, "응시요일": r.day, "응시일자": r.exam_date,
         _row: ""                                     // 시트 행 번호는 원본이 와야 안다
-      })).filter(r => (r["이름"] || r["학생ID"]));
-      FAST_DRAWN = true;
-      setState("", false);
-      $("updated").textContent = "원본 확인 중…";
-      buildFilters();
-      render();
+      })).filter(r => (r["이름"] || r["학생ID"])), 2, "원본 확인 중…");
     }).catch(function(){ /* 실패해도 무해 — 원본 조회가 화면을 그린다 */ });
   }
 
@@ -992,8 +1067,9 @@
   $("pw").addEventListener("keydown", e => { if (e.key === "Enter") submitPw(); });
   // 비밀번호 게이트 제거 — 바로 데이터 로드 (실패 시에만 게이트 표시)
   enterApp();
-  sbLoadFast();   // 미러로 먼저 그린다 (원본이 오면 그쪽으로 바뀐다)
-  fetchData();
+  sgCacheDraw();  // ① 지난번에 본 목록을 바로 (기다림 0초)
+  sbLoadFast();   // ② 미러로 갱신
+  fetchData();    // ③ 원본(신청 시트)이 오면 그쪽이 이긴다
 </script>
 </body>
 </html>
