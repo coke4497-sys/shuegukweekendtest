@@ -57,6 +57,17 @@ clasp deploy -i <DEPLOYMENT_ID>      # 기존 배포 새 버전(= exec 주소 �
 
 > 참고: 토큰은 세션마다 새로 로그인해 얻는다(저장 안 함). refresh_token 재사용은 안전한 비밀 저장소가 생기면 그때 도입.
 
+## 출제·OMR도 수파베이스가 원본 (2026-08-26 전환)
+회차(omr_exams)·응답(omr_responses)의 원본이 수파베이스가 됐다(리포트 저장소
+`supabase/migrations/017_omr_origin.sql` — 채점까지 DB 함수로 이식, 그쪽 `supabase/README.md` 참고).
+- **학생 OMR·성적 관리 화면은 hub 저장소의 정적 페이지가 본체다**(`omr.html`·`omr_teacher.html`) —
+  이 저장소의 `omr_student.html`·`teacher.html`은 UI 원본이었고, 이제 앱스스크립트 쪽은
+  리다이렉트만 한다. **화면 수정은 hub 쪽 파일에서 할 것.**
+- `omr_code.gs` 변경(재배포 필요): doPost `action=submit` = 정적 페이지가 제출 후 응답 시트
+  '사본'을 맞추는 이중 기록 / doGet = 새 정적 페이지로 리다이렉트.
+- 재배포 전까지: 새 페이지 제출은 원본(수파베이스)에만 남고 시트 사본이 비는데, 새벽 점검이
+  '원본에만 n건'으로 보고한다(유실 아님).
+
 ## 신청 데이터는 수파베이스가 원본 (2026-08-26 전환 — 아래 두 절보다 우선)
 `signup_entries`가 신청의 원본이다(리포트 저장소 `supabase/migrations/016_signup_origin.sql` —
 판정 함수 signup_days/signup_submit/signup_mine, 자세한 것은 그쪽 `supabase/README.md`).
