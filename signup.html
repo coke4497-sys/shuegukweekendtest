@@ -333,6 +333,24 @@
     window.scrollTo({top:0, behavior:"smooth"});
   }
 
+  let DAYS_DIRECT = false;   // 신청 백엔드(원본) 응답을 이미 반영했는지 — 이후 선조회 전달분은 무시
+  function applyDays(resp){
+    if (!resp || resp.result !== "success") return;
+    if (resp.open === false){ showClosed(); return; }
+    // 선조회 전달분이 '중단'으로 닫아 뒀는데 원본이 '진행'이면 다시 연다 (신청 완료 화면은 건드리지 않음)
+    if (document.getElementById("closed").style.display === "block" &&
+        document.getElementById("done").style.display !== "block"){
+      document.getElementById("closed").style.display = "none";
+      document.getElementById("form").style.display = "block";
+    }
+    dayCap = resp.cap || 37;
+    dayCounts = resp.counts || {};
+    dayDates = resp.dates || {};
+    if (Array.isArray(resp.days) && resp.days.length) dayList = resp.days;
+    buildDayOptions();
+    buildGradeChoices(resp.grades && resp.grades.length ? resp.grades : ["3"]);
+  }
+
   function loadDays(){
     if (!apiReady()){
       // 주소 미입력(로컬 데모): 임시 날짜
@@ -342,17 +360,30 @@
       return;
     }
     jsonpRequest({ action: "days" }, function(resp){
-      if (!resp || resp.result !== "success") return;
-      if (resp.open === false){ showClosed(); return; }
-      dayCap = resp.cap || 37;
-      dayCounts = resp.counts || {};
-      dayDates = resp.dates || {};
-      if (Array.isArray(resp.days) && resp.days.length) dayList = resp.days;
-      buildDayOptions();
-      buildGradeChoices(resp.grades && resp.grades.length ? resp.grades : ["3"]);
+      DAYS_DIRECT = true;   // 원본 도착 — 이 응답이 최종
+      applyDays(resp);
     });
   }
   loadDays();
+
+  /* 학생 개별 페이지(실전 모의고사 메뉴)가 미리 받아 둔 days 응답(sessionStorage 'mockDaysPre',
+   * 같은 도메인). 신청 백엔드 응답(실측 2~5초)이 오기 전에 요일·남은자리·학년을 즉시 그린다.
+   * 원본 응답이 오면 그쪽이 이긴다(DAYS_DIRECT). 메뉴에서 바로 넘어오면 선조회가 아직
+   * 이동 중일 수 있어 6초까지 300ms 간격으로 기다렸다 집어 간다. */
+  (function preDrawFromHub(){
+    let tries = 0;
+    function pick(){
+      if (DAYS_DIRECT) return;                     // 원본이 이미 도착 — 선조회분 무시
+      let kept = null;
+      try { kept = JSON.parse(sessionStorage.getItem("mockDaysPre") || "null"); } catch(e){}
+      if (kept && kept.resp && Date.now() - kept.at < 180000){
+        if (!DAYS_DIRECT) applyDays(kept.resp);
+        return;
+      }
+      if (++tries < 20) setTimeout(pick, 300);
+    }
+    pick();
+  })();
 
   document.getElementById("day").addEventListener("change", () => {
     document.getElementById("f-day").classList.remove("invalid");
