@@ -218,8 +218,9 @@
   let dayList = ["토요일", "일요일"];
 
   
-  /* ── 수파베이스 미러 (2026-08-23 DB 이전) — 신청 성공 시 미러에도 한 줄 추가.
-   * 실패해도 신청에는 영향 없음(교사 화면 열람·일일 점검이 다시 맞춘다). */
+  /* ── 수파베이스 넣기 훅 (2026-08-23 DB 이전 → 2026-08-26부터 수파베이스가 원본)
+   * 평소 제출은 signup_submit 함수가 원본에 직접 기록한다. 이 함수는 수파베이스 장애로
+   * 옛 백엔드에 폴백 제출했을 때만 원본을 뒤따라 맞추는 용도. 실패해도 신청에는 영향 없음. */
   const SB_REST = "https://bangdbhqpphqqdwcledg.supabase.co/rest/v1";
   const SB_KEY = "sb_publishable_dE9d1KIbpgYaQkaS2MSrlg_-7SiRJuT";
   function sbP2(n){ return String(n).padStart(2, "0"); }
@@ -333,11 +334,10 @@
     window.scrollTo({top:0, behavior:"smooth"});
   }
 
-  let DAYS_DIRECT = false;   // 신청 백엔드(원본) 응답을 이미 반영했는지 — 이후 선조회 전달분은 무시
   function applyDays(resp){
     if (!resp || resp.result !== "success") return;
     if (resp.open === false){ showClosed(); return; }
-    // 선조회 전달분이 '중단'으로 닫아 뒀는데 원본이 '진행'이면 다시 연다 (신청 완료 화면은 건드리지 않음)
+    // 이전 응답이 '중단'으로 닫아 뒀는데 새 응답이 '진행'이면 다시 연다 (신청 완료 화면은 건드리지 않음)
     if (document.getElementById("closed").style.display === "block" &&
         document.getElementById("done").style.display !== "block"){
       document.getElementById("closed").style.display = "none";
@@ -351,6 +351,19 @@
     buildGradeChoices(resp.grades && resp.grades.length ? resp.grades : ["3"]);
   }
 
+  /* 수파베이스 함수 호출 — 신청 데이터의 원본(2026-08-26 전환, 016 마이그레이션).
+   * 학생 페이지라 공개 키로 SECURITY DEFINER 함수만 부른다(표 직접 접근 불가). */
+  function sbRpc(fn, args){
+    return fetch(SB_REST + "/rpc/" + fn, {
+      method: "POST",
+      headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(args || {})
+    }).then(function(r){ if (!r.ok) throw new Error("sb rpc " + r.status); return r.json(); });
+  }
+
+  /* 요일·남은자리·학년 — 수파베이스(원본, 0.3초 안팎)에서 바로 받는다.
+   * 실패하면 옛 신청 백엔드(2~5초)로 폴백. (옛 sessionStorage 선조회 전달은 원본이
+   * 빨라져 더는 필요 없어 제거 — 2026-08-26) */
   function loadDays(){
     if (!apiReady()){
       // 주소 미입력(로컬 데모): 임시 날짜
@@ -359,31 +372,11 @@
       buildGradeChoices(["3"]);
       return;
     }
-    jsonpRequest({ action: "days" }, function(resp){
-      DAYS_DIRECT = true;   // 원본 도착 — 이 응답이 최종
-      applyDays(resp);
+    sbRpc("signup_days", {}).then(applyDays).catch(function(){
+      jsonpRequest({ action: "days" }, applyDays);
     });
   }
   loadDays();
-
-  /* 학생 개별 페이지(실전 모의고사 메뉴)가 미리 받아 둔 days 응답(sessionStorage 'mockDaysPre',
-   * 같은 도메인). 신청 백엔드 응답(실측 2~5초)이 오기 전에 요일·남은자리·학년을 즉시 그린다.
-   * 원본 응답이 오면 그쪽이 이긴다(DAYS_DIRECT). 메뉴에서 바로 넘어오면 선조회가 아직
-   * 이동 중일 수 있어 6초까지 300ms 간격으로 기다렸다 집어 간다. */
-  (function preDrawFromHub(){
-    let tries = 0;
-    function pick(){
-      if (DAYS_DIRECT) return;                     // 원본이 이미 도착 — 선조회분 무시
-      let kept = null;
-      try { kept = JSON.parse(sessionStorage.getItem("mockDaysPre") || "null"); } catch(e){}
-      if (kept && kept.resp && Date.now() - kept.at < 180000){
-        if (!DAYS_DIRECT) applyDays(kept.resp);
-        return;
-      }
-      if (++tries < 20) setTimeout(pick, 300);
-    }
-    pick();
-  })();
 
   document.getElementById("day").addEventListener("change", () => {
     document.getElementById("f-day").classList.remove("invalid");
@@ -440,11 +433,10 @@
     }
 
     try { localStorage.setItem("signup_student", JSON.stringify({ nm:name, sc:school, gr:grade, sid:id })); } catch(e){}
-    jsonpRequest({
-      action: "submit", name, school, grade, id, subject, day
-    }, function(resp){
+
+    // 제출 응답 처리 — 수파베이스(원본)와 옛 백엔드(폴백)가 같은 모양의 응답을 준다
+    function handleResp(resp){
       if (resp && resp.result === "success"){
-        sbMirrorSignup({ name, school, grade, id, subject, day });
         finishOk();
       } else if (resp && resp.result === "full"){
         btn.disabled = false; btn.textContent = "신청하기";
@@ -456,13 +448,35 @@
         f.scrollIntoView({behavior:"smooth", block:"center"});
       } else if (resp && resp.result === "closed"){
         showClosed();
+      } else if (resp && resp.result === "grade_closed"){
+        btn.disabled = false; btn.textContent = "신청하기";
+        alert("지금은 해당 학년의 신청을 받지 않아요.");
+        loadDays();   // 학년 버튼을 최신 설정으로 다시 그린다
       } else {
         btn.disabled = false; btn.textContent = "신청하기";
         alert("전송에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
       }
-    }, function(){
-      btn.disabled = false; btn.textContent = "신청하기";
-      alert("전송에 문제가 생겼어요. 인터넷 연결을 확인하고 다시 시도해 주세요.");
+    }
+
+    const payload = { name, school, grade, id, subject, day };
+    /* 신청의 원본은 수파베이스(signup_submit — 열림·학년·정원 판정 포함, 0.5초 안팎).
+     * 성공하면 신청 시트에도 같은 내용을 뒤에서 보내 사본을 맞춘다(응답은 기다리지 않음 —
+     * 실패해도 무해, 새벽 점검이 차이를 보고한다). 수파베이스 장애면 옛 경로로 폴백. */
+    sbRpc("signup_submit", { p: payload }).then(function(resp){
+      if (resp && resp.result === "success"){
+        try { jsonpRequest({ action: "submit", name, school, grade, id, subject, day }, function(){}, function(){}); } catch(e){}
+      }
+      handleResp(resp);
+    }).catch(function(){
+      jsonpRequest({
+        action: "submit", name, school, grade, id, subject, day
+      }, function(resp){
+        if (resp && resp.result === "success") sbMirrorSignup(payload);   // 폴백 성공 시 원본도 맞춘다
+        handleResp(resp);
+      }, function(){
+        btn.disabled = false; btn.textContent = "신청하기";
+        alert("전송에 문제가 생겼어요. 인터넷 연결을 확인하고 다시 시도해 주세요.");
+      });
     });
   });
 

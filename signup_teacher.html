@@ -393,11 +393,14 @@
   }
 
   let allRows = [];
-  /* 원본(신청 시트)이 도착했는가 / 미러로 먼저 그렸는가.
-   * 시트 조회는 2~5초가 걸려서 그동안 화면이 비어 있었다(2026-08-26 실측 2.3·3.2·5.4초).
-   * 미러(수파베이스)에는 같은 내용이 있으므로 그걸로 먼저 그리고, 원본은 뒤에서 받는다.
-   * 삭제는 시트의 행 번호(_row)가 있어야 하므로 원본이 오기 전에는 잠가 둔다. */
-  let SHEET_READY = false, FAST_DRAWN = false;
+  /* 2026-08-26부터 신청 데이터의 원본은 수파베이스(signup_entries)다 (016 마이그레이션).
+   * 목록·삭제 모두 원본 기준 — 삭제는 id로 바로 지우므로 시트 행 번호를 기다리지 않는다.
+   * 신청 시트는 사본: fetchData(옛 백엔드)는 설정(신청받기·학년, 이건 여전히 백엔드가 원본)과
+   * 시트 행 번호(이중 삭제용)를 받고, 원본과 몇 건 차이 나는지 위쪽에 알려 주기만 한다. */
+  let ORIGIN_READY = false;   // 원본(수파베이스) 목록을 그렸는가
+  let SHEET_READY = false;    // 시트 사본 응답이 왔는가 (설정·행 번호 대조용)
+  let DRAWN = false;          // 화면에 목록을 그렸는가 (원본이든 시트 폴백이든)
+  let sheetRowMap = {};       // '제출시각(분)|이름' → [시트 행 번호…] — 시트 이중 삭제용
   let authed = false;
   let teacherPw = "sh";   // 게이트 제거(2026-08-14) — 백엔드 검증용으로 내장
   let signupOpen = true;
@@ -450,8 +453,8 @@
   function fetchData(attempt){
     attempt = attempt || 1;
     if (authed){
-      // 미러로 이미 그려 놨으면 화면을 비우지 않고 위에만 알린다
-      if (FAST_DRAWN) $("updated").textContent = attempt === 1 ? "원본 확인 중…" : "원본 확인 중… (다시 시도)";
+      // 원본(수파베이스)으로 이미 그려 놨으면 화면을 비우지 않고 위에만 알린다
+      if (DRAWN) $("updated").textContent = attempt === 1 ? "시트 사본 확인 중…" : "시트 사본 확인 중… (다시 시도)";
       else setState(attempt === 1 ? "신청 현황을 불러오는 중…" : "서버 응답이 늦어 다시 시도하는 중…", false);
       $("refresh").disabled = true;
     }
@@ -465,7 +468,7 @@
       if (script.parentNode) script.parentNode.removeChild(script);
       if (attempt < 3){ fetchData(attempt + 1); return; }
       $("refresh").disabled = false;
-      if (FAST_DRAWN) $("updated").textContent = "원본을 못 받았어요 — 삭제는 새로고침 뒤에";
+      if (DRAWN) $("updated").textContent = "시트 사본을 확인 못 했어요 (목록·삭제는 정상)";
       else if (authed) setState("서버 응답이 느려요. 잠시 후 '새로고침'을 다시 눌러 주세요.", true);
       else showGate("서버 응답이 느려요. 잠시 후 다시 시도해 주세요.");
     }, attempt === 1 ? 12000 : 20000);
@@ -476,30 +479,44 @@
       $("refresh").disabled = false;
       if (!resp || resp.result !== "success"){
         if (resp && resp.message === "unauthorized"){ showGate("비밀번호가 올바르지 않습니다."); }
+        else if (DRAWN){ $("updated").textContent = "시트 사본을 확인 못 했어요 (목록·삭제는 정상)"; }
         else if (authed){ setState("데이터를 불러오지 못했어요. 웹앱 주소를 확인해 주세요.", true); }
         else { showGate("데이터를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."); }
         return;
       }
       if (!authed) enterApp();
+      // 신청받기·가능 학년은 여전히 신청 백엔드가 원본 — 이 응답이 이긴다
       if (typeof resp.open !== "undefined") signupOpen = !!resp.open;
       if (resp.cap) DAY_CAP = resp.cap;
       renderOpenState();
       if (resp.grades) setGradeUI(resp.grades);
       SHEET_READY = true;
-      allRows = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
-      sbResyncSignup(allRows);
+      const sheetRows = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
+      // 시트 이중 삭제용 지도 — 이름별로 행 번호·시각·요일을 들고 있다가 삭제 때 대조
+      sheetRowMap = {};
+      sheetRows.forEach(r => {
+        const nm = String(r["이름"]||"").trim();
+        (sheetRowMap[nm] = sheetRowMap[nm] || []).push(
+          { row: r._row, ts: String(r["제출시각"]||""), day: String(r["응시요일"]||"").trim() });
+      });
       sbSyncSettings(resp.open, resp.grades);
-      $("updated").textContent = "업데이트 " + new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
+      if (!ORIGIN_READY){
+        // 원본(수파베이스)을 아직 못 읽었을 때만 시트 사본으로 그린다(폴백 — 삭제는 옛 방식)
+        allRows = sheetRows;
+        DRAWN = true;
+        buildFilters();
+        render();
+      }
+      $("updated").textContent = "업데이트 " + new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}) + sheetDiffNote(sheetRows);
       setState("", false);
-      buildFilters();
-      render();
     };
     script.onerror = function(){
       if (settled) return; settled = true; clearTimeout(slowTimer);
       if (script.parentNode) script.parentNode.removeChild(script);
       if (attempt < 3){ setTimeout(function(){ fetchData(attempt + 1); }, 1200); return; }
       $("refresh").disabled = false;
-      if (authed) setState("데이터를 불러오지 못했어요. 인터넷 연결과 웹앱 주소를 확인해 주세요.", true);
+      if (DRAWN) $("updated").textContent = "시트 사본을 확인 못 했어요 (목록·삭제는 정상)";
+      else if (authed) setState("데이터를 불러오지 못했어요. 인터넷 연결과 웹앱 주소를 확인해 주세요.", true);
       else showGate("연결에 실패했어요. 인터넷 연결을 확인해 주세요.");
     };
     script.src = DATA_URL + "?action=data"
@@ -532,19 +549,18 @@
     const d = new Date(tm + 9 * 3600000);
     return (d.getUTCMonth()+1) + "월 " + d.getUTCDate() + "일";
   }
-  function sbResyncSignup(rows){
-    try {
-      const H = { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY,
-                  "Content-Type": "application/json", "Prefer": "return=minimal" };
-      const body = (rows || []).map(r => ({
-        ts: sbNormTs(r["제출시각"]), name: String(r["이름"] || ""), school: String(r["학교"] || ""),
-        grade: String(r["학년"] == null ? "" : r["학년"]), student_id: String(r["학생ID"] || ""),
-        subject: String(r["선택과목"] || ""), day: String(r["응시요일"] || ""),
-        exam_date: sbNormDate(r["응시일자"]) }));
-      fetch(SB_REST + "/signup_entries?id=gt.0", { method: "DELETE", headers: H })
-        .then(() => body.length ? fetch(SB_REST + "/signup_entries", { method: "POST", headers: H, body: JSON.stringify(body) }) : null)
-        .catch(e => console.warn("신청 미러 재동기화 실패 — 일일 점검이 복구", e));
-    } catch (e) {}
+  /* (2026-08-26) 옛 sbResyncSignup(시트 기준 통째 재동기화)은 지웠다 — 수파베이스가 원본이
+   * 되면서, 지금 돌리면 방금 들어온 신청·삭제가 옛 시트 내용으로 되돌아간다.
+   * 대신 원본과 시트 사본의 차이를 세어 위쪽 '업데이트' 줄에 알린다(맞추는 건 새벽 점검·수동). */
+  function sheetDiffNote(sheetRows){
+    if (!ORIGIN_READY) return "";
+    const key = r => sbNormTs(r["제출시각"]) + "|" + String(r["이름"]||"").trim() + "|" + String(r["응시요일"]||"").trim();
+    const cnt = {};
+    allRows.forEach(r => { const k = key(r); cnt[k] = (cnt[k]||0) + 1; });
+    let diff = 0;
+    sheetRows.forEach(r => { const k = key(r); if (cnt[k]) cnt[k]--; else diff++; });
+    for (const k in cnt) diff += cnt[k];
+    return diff ? " · 시트 사본과 " + diff + "건 차이" : "";
   }
 
   /* 신청 설정 미러(signup_settings) — 학생 개별 페이지가 이 두 값 때문에 열릴 때마다
@@ -571,32 +587,34 @@
     } catch (e) {}
   }
 
-  /* 미러로 먼저 그리기 — 원본이 오면 그쪽이 이깁니다(SHEET_READY). 실패해도 무해. */
-  function sbLoadFast(){
+  /* 원본(수파베이스) 목록 — 목록·삭제의 기준. 0.3초 안팎이라 첫 화면이 바로 그려진다.
+   * 실패하면 fetchData(시트 사본)가 폴백으로 그린다(그때 삭제는 옛 행 번호 방식). */
+  function loadOrigin(){
     const H = { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY };
-    const q = "/signup_entries?select=ts,name,school,grade,student_id,subject,day,exam_date&order=id.asc&limit=5000";
-    Promise.all([
+    const q = "/signup_entries?select=id,ts,name,school,grade,student_id,subject,day,exam_date&order=id.asc&limit=5000";
+    return Promise.all([
       fetch(SB_REST + q, { headers: H, cache: "no-store" })
         .then(r => r.ok ? r.json() : Promise.reject(new Error("sb " + r.status))),
       fetch(SB_REST + "/signup_settings?select=key,value", { headers: H, cache: "no-store" })
         .then(r => r.ok ? r.json() : []).catch(() => [])
     ]).then(function(res){
       const rows = res[0], set = res[1];
-      if (SHEET_READY || !rows.length) return;      // 원본이 이미 왔으면 건드리지 않는다
       const cfg = {}; (set || []).forEach(c => { cfg[c.key] = c.value; });
-      if (typeof cfg.open !== "undefined"){ signupOpen = !!cfg.open; renderOpenState(); }
-      if (Array.isArray(cfg.grades)) setGradeUI(cfg.grades.map(String));
+      if (!SHEET_READY){   // 신청받기·학년은 신청 백엔드가 원본 — 그 응답이 왔으면 그쪽이 이긴다
+        if (typeof cfg.open !== "undefined"){ signupOpen = !!cfg.open; renderOpenState(); }
+        if (Array.isArray(cfg.grades)) setGradeUI(cfg.grades.map(String));
+      }
       allRows = rows.map(r => ({
+        _id: r.id,
         "제출시각": r.ts, "이름": r.name, "학교": r.school, "학년": r.grade,
-        "학생ID": r.student_id, "선택과목": r.subject, "응시요일": r.day, "응시일자": r.exam_date,
-        _row: ""                                     // 시트 행 번호는 원본이 와야 안다
+        "학생ID": r.student_id, "선택과목": r.subject, "응시요일": r.day, "응시일자": r.exam_date
       })).filter(r => (r["이름"] || r["학생ID"]));
-      FAST_DRAWN = true;
+      ORIGIN_READY = true; DRAWN = true;
       setState("", false);
-      $("updated").textContent = "원본 확인 중…";
+      if (!SHEET_READY) $("updated").textContent = "시트 사본 확인 중…";
       buildFilters();
       render();
-    }).catch(function(){ /* 실패해도 무해 — 원본 조회가 화면을 그린다 */ });
+    }).catch(function(e){ console.warn("원본(수파베이스) 조회 실패 — 시트 사본으로 그립니다", e); });
   }
 
   function studentKey(r){ return (r["이름"]||"") + "|" + (r["학교"]||"") + "|" + (r["학생ID"]||""); }
@@ -698,10 +716,10 @@
       const dup = dups[dkey] > 1 ? ' <span class="tag dup">중복</span>' : '';
       const dateLabel = examDayLabel(r);
       const info = (r["이름"]||"") + " · " + (r["학교"]||"") + " · " + day + (dateLabel ? " ("+dateLabel+")" : "");
-      // 삭제는 시트의 행 번호가 있어야 안전하다 — 미러로만 그린 동안은 잠가 둔다
-      const lock = r._row ? "" : ' disabled title="원본을 불러오는 중이에요 — 잠시 뒤에 지울 수 있어요"';
+      // 원본(수파베이스)으로 그린 줄은 id로 바로 지운다. 시트 폴백 줄은 행 번호(_row)로.
+      const lock = (r._id || r._row) ? "" : ' disabled title="원본을 불러오는 중이에요 — 잠시 뒤에 지울 수 있어요"';
       return `<tr>
-        <td class="sel"><input type="checkbox" class="row-sel"${lock} data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}"></td>
+        <td class="sel"><input type="checkbox" class="row-sel"${lock} data-id="${esc(r._id||"")}" data-row="${esc(r._row||"")}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}"></td>
         <td class="when">${esc(shortTime(r["제출시각"]))}</td>
         <td class="nm">${esc(r["이름"])}${dup}</td>
         <td>${esc(r["학교"])}</td>
@@ -710,13 +728,68 @@
         <td>${esc(r["선택과목"])}</td>
         <td><span class="tag ${cls}">${esc(day)}</span></td>
         <td>${esc(dateLabel)}</td>
-        <td class="del"><button class="del-btn"${lock} data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}" data-info="${esc(info)}">삭제</button></td>
+        <td class="del"><button class="del-btn"${lock} data-id="${esc(r._id||"")}" data-row="${esc(r._row||"")}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}" data-info="${esc(info)}">삭제</button></td>
       </tr>`;
     }).join("");
     $("list").innerHTML = `<div class="table-card"><div class="tbl-scroll"><table>
-      <thead><tr><th class="sel"><input type="checkbox" id="sel-all"${SHEET_READY ? "" : " disabled"} title="보이는 신청 전체 선택"></th><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th><th>삭제</th></tr></thead>
+      <thead><tr><th class="sel"><input type="checkbox" id="sel-all"${(ORIGIN_READY || SHEET_READY) ? "" : " disabled"} title="보이는 신청 전체 선택"></th><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th><th>삭제</th></tr></thead>
       <tbody>${body}</tbody></table></div></div>`;
     updateBulkBtn();
+  }
+
+  /* ── 원본(수파베이스) 삭제 → 화면 갱신 → 시트 사본도 뒤에서 지운다 ── */
+  function sbDeleteEntries(items){
+    const ids = items.map(x => x.id).filter(Boolean);
+    if (!ids.length) return Promise.reject(new Error("no ids"));
+    // 요일·시각은 화면 데이터에서 채운다 (시트 사본 대조용)
+    const byId = {}; allRows.forEach(r => { if (r._id) byId[r._id] = r; });
+    items.forEach(it => { const r = byId[it.id];
+      if (r){ it.day = String(r["응시요일"]||""); if (!it.ts) it.ts = String(r["제출시각"]||""); } });
+    return fetch(SB_REST + "/signup_entries?id=in.(" + ids.join(",") + ")", {
+      method: "DELETE",
+      headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY, "Prefer": "return=minimal" }
+    }).then(function(r){
+      if (!r.ok) throw new Error("sb " + r.status);
+      const del = new Set(ids);
+      allRows = allRows.filter(x => !del.has(x._id));
+      buildFilters(); render();
+      sheetDeleteCopies(items);
+    });
+  }
+  /* 시트 사본에서 같은 신청을 찾아 지운다 — 이름·요일이 같고 제출시각이 3분 이내인 행.
+   * (사본은 뒤에서 따로 기록돼 원본과 분 단위가 어긋날 수 있어 정확 일치로 안 잡는다)
+   * 응답을 기다리지 않는 뒷정리라 실패해도 화면·원본에는 영향 없음
+   * (차이는 위쪽 '시트 사본과 n건 차이'와 새벽 점검이 알림). */
+  function sheetDeleteCopies(items){
+    // 분 단위 비교값 — sbNormTs로 KST 문자열('yyyy-MM-dd HH:mm')로 맞춘 뒤 세므로
+    // 시트(UTC ISO)·원본(KST 문자열) 표기 차이와 보는 기기의 시간대에 영향받지 않는다
+    const mins = s => {
+      const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(sbNormTs(s));
+      return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) / 60000 : null;
+    };
+    const rows = [];
+    items.forEach(function(it){
+      const cand = sheetRowMap[String(it.name || "").trim()] || [];
+      const m = mins(it.ts), day = String(it.day || "").trim();
+      let best = -1, bestGap = 4;   // 3분 이내만
+      cand.forEach(function(c, i){
+        if (c.used) return;
+        if (day && c.day && c.day !== day) return;
+        const cm = mins(c.ts);
+        const gap = (m == null || cm == null) ? 99 : Math.abs(cm - m);
+        if (gap < bestGap){ bestGap = gap; best = i; }
+      });
+      if (best >= 0){ cand[best].used = true; rows.push([cand[best].row, it.name, cand[best].ts]); }
+    });
+    const done = function(){ fetchData(); };   // 시트 행 번호 지도·차이 표시를 새로 받는다
+    if (!rows.length){ done(); return; }
+    const cb = "shuegukCopyDel" + Date.now();
+    const script = document.createElement("script");
+    window[cb] = function(){ window[cb] = undefined; if (script.parentNode) script.parentNode.removeChild(script); done(); };
+    script.onerror = function(){ window[cb] = undefined; if (script.parentNode) script.parentNode.removeChild(script); done(); };
+    script.src = DATA_URL + "?action=deleteMany&items=" + encodeURIComponent(JSON.stringify(rows))
+               + "&pw=" + encodeURIComponent(teacherPw) + "&callback=" + cb + "&t=" + Date.now();
+    document.body.appendChild(script);
   }
 
   // ── 선택 삭제 (여러 건 체크 → 한 번에 삭제) ──
@@ -741,6 +814,16 @@
     if (!boxes.length) return;
     const names = boxes.slice(0,5).map(b=>b.dataset.name).join(", ") + (boxes.length>5 ? " 외" : "");
     if (!window.confirm(`선택한 ${boxes.length}건(${names})을 삭제할까요?\n시트에서 해당 행이 지워지며 되돌릴 수 없어요.`)) return;
+    // 원본(수파베이스)으로 그린 화면이면 id로 바로 지운다 — 시트 사본은 뒤에서 정리
+    if (boxes.every(b => b.dataset.id)){
+      const sbItems = boxes.map(b => ({ id: +b.dataset.id, name: b.dataset.name, ts: b.dataset.ts }));
+      const sbBtn = $("del-selected");
+      sbBtn.disabled = true; sbBtn.textContent = "삭제 중…";
+      sbDeleteEntries(sbItems)
+        .then(function(){ sbBtn.disabled = false; updateBulkBtn(); })
+        .catch(function(){ sbBtn.disabled = false; updateBulkBtn(); alert("삭제에 실패했어요. 잠시 후 다시 시도해 주세요."); });
+      return;
+    }
     const items = boxes.map(b => [ +b.dataset.row, b.dataset.name, b.dataset.ts ]);
     const btn = $("del-selected");
     btn.disabled = true; btn.textContent = "삭제 중…";
@@ -789,6 +872,13 @@
   });
   function deleteSignup(btn){
     if (!window.confirm(btn.dataset.info + "\n\n이 신청을 삭제할까요?\n시트에서 해당 행이 지워지며 되돌릴 수 없어요.")) return;
+    // 원본(수파베이스)으로 그린 줄이면 id로 바로 지운다 — 시트 사본은 뒤에서 정리
+    if (btn.dataset.id){
+      btn.disabled = true; btn.textContent = "삭제 중…";
+      sbDeleteEntries([{ id: +btn.dataset.id, name: btn.dataset.name, ts: btn.dataset.ts }])
+        .catch(function(){ btn.disabled = false; btn.textContent = "삭제"; alert("삭제에 실패했어요. 잠시 후 다시 시도해 주세요."); });
+      return;
+    }
     btn.disabled = true; btn.textContent = "삭제 중…";
     const cb = "shuegukDel" + Date.now();
     const script = document.createElement("script");
@@ -860,7 +950,7 @@
   ["q","f-week","f-day","f-grade","f-subject","f-school"].forEach(id => $(id).addEventListener("input", render));
   $("week-prev").addEventListener("click", ()=> moveWeek(+1));
   $("week-next").addEventListener("click", ()=> moveWeek(-1));
-  $("refresh").addEventListener("click", fetchData);
+  $("refresh").addEventListener("click", function(){ loadOrigin(); fetchData(); });
 
   // 신청 받기 ON/OFF
   function renderOpenState(){
@@ -992,8 +1082,8 @@
   $("pw").addEventListener("keydown", e => { if (e.key === "Enter") submitPw(); });
   // 비밀번호 게이트 제거 — 바로 데이터 로드 (실패 시에만 게이트 표시)
   enterApp();
-  sbLoadFast();   // 미러로 먼저 그린다 (원본이 오면 그쪽으로 바뀐다)
-  fetchData();
+  loadOrigin();   // 원본(수파베이스) — 목록·삭제의 기준, 첫 화면을 바로 그린다
+  fetchData();    // 시트 사본 — 설정(원본)·행 번호 대조·차이 표시
 </script>
 </body>
 </html>
