@@ -56,3 +56,20 @@ clasp deploy -i <DEPLOYMENT_ID>      # 기존 배포 새 버전(= exec 주소 �
 | 클리닉 | `shueguk-clinic/Code.gs` | `AKfycbw8e-054e4VUfRRx-PadyuoXRb-jxsKRcdOaq04SJH1oJyFVS_VOh9GUN_pL5cHPPzKVA` | `1NF3H9DL5mxiTeYyKXGs0MJOUB-jawH0YuekudKzPpapi0n7HRlFxCDq9` |
 
 > 참고: 토큰은 세션마다 새로 로그인해 얻는다(저장 안 함). refresh_token 재사용은 안전한 비밀 저장소가 생기면 그때 도입.
+
+## 신청 확인 페이지 첫 화면은 미러(수파베이스)에서 (2026-08-26)
+`signup_teacher.html`이 열릴 때 신청 목록을 신청 백엔드(`action=data`)에서 받는데, 구글 서버가
+시트를 읽는 시간 때문에 **2.3~5.4초** 걸린다(실측). 그동안 화면이 비어 있었다.
+
+미러(`signup_entries`)에 같은 내용이 있으므로 **미러로 먼저 그리고, 원본인 시트는 뒤에서 받는다**
+(`sbLoadFast` → `fetchData`). 첫 화면 **0.23~0.62초**.
+- **삭제는 시트의 행 번호(`_row`)가 있어야 한다** — 미러에는 없으므로 원본이 오기 전에는
+  체크박스·삭제 버튼을 잠가 둔다(`lock`, 안내 title). 원본이 오면 그대로 다시 그려 풀린다.
+- 원본이 오면 그쪽이 이긴다(`SHEET_READY`) — 미러 응답이 늦게 도착해도 덮어쓰지 않는다.
+- 미러로 이미 그린 뒤에는 `setState`로 화면을 비우지 않는다(`FAST_DRAWN`) — 새로고침·재시도 때
+  목록이 사라지지 않게. 위쪽 '업데이트' 자리에 '원본 확인 중…'으로만 알린다.
+- 신청받기·가능 학년도 `signup_settings` 미러에서 먼저 읽어 토글이 바로 보인다.
+- 미러 신선도: 학생이 신청하면 즉시 한 줄 들어가고, 이 페이지가 목록을 읽을 때마다
+  `sbResyncSignup`이 시트 기준으로 통째 교체하며, 삭제 성공 시에도 `fetchData()`가 다시 돈다.
+- 검증(2026-08-26): 미러 314건 = 시트 314건, **화면에 찍히는 값(시각·주차·이름·학교·학년·ID·
+  과목·요일)까지 314건 전부 동일**. 어휘 결과 페이지(`shueguk-voca`)와 같은 방식이다.

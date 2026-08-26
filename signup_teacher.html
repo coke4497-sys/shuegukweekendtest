@@ -393,6 +393,11 @@
   }
 
   let allRows = [];
+  /* 원본(신청 시트)이 도착했는가 / 미러로 먼저 그렸는가.
+   * 시트 조회는 2~5초가 걸려서 그동안 화면이 비어 있었다(2026-08-26 실측 2.3·3.2·5.4초).
+   * 미러(수파베이스)에는 같은 내용이 있으므로 그걸로 먼저 그리고, 원본은 뒤에서 받는다.
+   * 삭제는 시트의 행 번호(_row)가 있어야 하므로 원본이 오기 전에는 잠가 둔다. */
+  let SHEET_READY = false, FAST_DRAWN = false;
   let authed = false;
   let teacherPw = "sh";   // 게이트 제거(2026-08-14) — 백엔드 검증용으로 내장
   let signupOpen = true;
@@ -444,7 +449,12 @@
 
   function fetchData(attempt){
     attempt = attempt || 1;
-    if (authed){ setState(attempt === 1 ? "신청 현황을 불러오는 중…" : "서버 응답이 늦어 다시 시도하는 중…", false); $("refresh").disabled = true; }
+    if (authed){
+      // 미러로 이미 그려 놨으면 화면을 비우지 않고 위에만 알린다
+      if (FAST_DRAWN) $("updated").textContent = attempt === 1 ? "원본 확인 중…" : "원본 확인 중… (다시 시도)";
+      else setState(attempt === 1 ? "신청 현황을 불러오는 중…" : "서버 응답이 늦어 다시 시도하는 중…", false);
+      $("refresh").disabled = true;
+    }
     const cb = "shuegukCb" + Date.now();
     const script = document.createElement("script");
     let settled = false;
@@ -455,7 +465,8 @@
       if (script.parentNode) script.parentNode.removeChild(script);
       if (attempt < 3){ fetchData(attempt + 1); return; }
       $("refresh").disabled = false;
-      if (authed) setState("서버 응답이 느려요. 잠시 후 '새로고침'을 다시 눌러 주세요.", true);
+      if (FAST_DRAWN) $("updated").textContent = "원본을 못 받았어요 — 삭제는 새로고침 뒤에";
+      else if (authed) setState("서버 응답이 느려요. 잠시 후 '새로고침'을 다시 눌러 주세요.", true);
       else showGate("서버 응답이 느려요. 잠시 후 다시 시도해 주세요.");
     }, attempt === 1 ? 12000 : 20000);
     window[cb] = function(resp){
@@ -474,6 +485,7 @@
       if (resp.cap) DAY_CAP = resp.cap;
       renderOpenState();
       if (resp.grades) setGradeUI(resp.grades);
+      SHEET_READY = true;
       allRows = (resp.rows || []).filter(r => (r["이름"] || r["학생ID"]));
       sbResyncSignup(allRows);
       sbSyncSettings(resp.open, resp.grades);
@@ -557,6 +569,34 @@
         body: sig
       }).catch(e => { sbSetLast = ""; console.warn("신청 설정 미러 실패 — 일일 점검이 복구", e); });
     } catch (e) {}
+  }
+
+  /* 미러로 먼저 그리기 — 원본이 오면 그쪽이 이깁니다(SHEET_READY). 실패해도 무해. */
+  function sbLoadFast(){
+    const H = { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY };
+    const q = "/signup_entries?select=ts,name,school,grade,student_id,subject,day,exam_date&order=id.asc&limit=5000";
+    Promise.all([
+      fetch(SB_REST + q, { headers: H, cache: "no-store" })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error("sb " + r.status))),
+      fetch(SB_REST + "/signup_settings?select=key,value", { headers: H, cache: "no-store" })
+        .then(r => r.ok ? r.json() : []).catch(() => [])
+    ]).then(function(res){
+      const rows = res[0], set = res[1];
+      if (SHEET_READY || !rows.length) return;      // 원본이 이미 왔으면 건드리지 않는다
+      const cfg = {}; (set || []).forEach(c => { cfg[c.key] = c.value; });
+      if (typeof cfg.open !== "undefined"){ signupOpen = !!cfg.open; renderOpenState(); }
+      if (Array.isArray(cfg.grades)) setGradeUI(cfg.grades.map(String));
+      allRows = rows.map(r => ({
+        "제출시각": r.ts, "이름": r.name, "학교": r.school, "학년": r.grade,
+        "학생ID": r.student_id, "선택과목": r.subject, "응시요일": r.day, "응시일자": r.exam_date,
+        _row: ""                                     // 시트 행 번호는 원본이 와야 안다
+      })).filter(r => (r["이름"] || r["학생ID"]));
+      FAST_DRAWN = true;
+      setState("", false);
+      $("updated").textContent = "원본 확인 중…";
+      buildFilters();
+      render();
+    }).catch(function(){ /* 실패해도 무해 — 원본 조회가 화면을 그린다 */ });
   }
 
   function studentKey(r){ return (r["이름"]||"") + "|" + (r["학교"]||"") + "|" + (r["학생ID"]||""); }
@@ -658,8 +698,10 @@
       const dup = dups[dkey] > 1 ? ' <span class="tag dup">중복</span>' : '';
       const dateLabel = examDayLabel(r);
       const info = (r["이름"]||"") + " · " + (r["학교"]||"") + " · " + day + (dateLabel ? " ("+dateLabel+")" : "");
+      // 삭제는 시트의 행 번호가 있어야 안전하다 — 미러로만 그린 동안은 잠가 둔다
+      const lock = r._row ? "" : ' disabled title="원본을 불러오는 중이에요 — 잠시 뒤에 지울 수 있어요"';
       return `<tr>
-        <td class="sel"><input type="checkbox" class="row-sel" data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}"></td>
+        <td class="sel"><input type="checkbox" class="row-sel"${lock} data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}"></td>
         <td class="when">${esc(shortTime(r["제출시각"]))}</td>
         <td class="nm">${esc(r["이름"])}${dup}</td>
         <td>${esc(r["학교"])}</td>
@@ -668,11 +710,11 @@
         <td>${esc(r["선택과목"])}</td>
         <td><span class="tag ${cls}">${esc(day)}</span></td>
         <td>${esc(dateLabel)}</td>
-        <td class="del"><button class="del-btn" data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}" data-info="${esc(info)}">삭제</button></td>
+        <td class="del"><button class="del-btn"${lock} data-row="${esc(r._row)}" data-ts="${esc(String(r["제출시각"]||""))}" data-name="${esc(r["이름"]||"")}" data-info="${esc(info)}">삭제</button></td>
       </tr>`;
     }).join("");
     $("list").innerHTML = `<div class="table-card"><div class="tbl-scroll"><table>
-      <thead><tr><th class="sel"><input type="checkbox" id="sel-all" title="보이는 신청 전체 선택"></th><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th><th>삭제</th></tr></thead>
+      <thead><tr><th class="sel"><input type="checkbox" id="sel-all"${SHEET_READY ? "" : " disabled"} title="보이는 신청 전체 선택"></th><th>시각</th><th>이름</th><th>학교</th><th>학년</th><th>학생ID</th><th>과목</th><th>요일</th><th>응시일</th><th>삭제</th></tr></thead>
       <tbody>${body}</tbody></table></div></div>`;
     updateBulkBtn();
   }
@@ -950,6 +992,7 @@
   $("pw").addEventListener("keydown", e => { if (e.key === "Enter") submitPw(); });
   // 비밀번호 게이트 제거 — 바로 데이터 로드 (실패 시에만 게이트 표시)
   enterApp();
+  sbLoadFast();   // 미러로 먼저 그린다 (원본이 오면 그쪽으로 바뀐다)
   fetchData();
 </script>
 </body>
