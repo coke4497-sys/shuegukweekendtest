@@ -127,3 +127,6 @@ days를 미리 받아 sessionStorage `mockDaysPre`(**같은 도메인**)로 넘�
 - 전달분이 '신청 중단'으로 닫아 뒀는데 원본이 '진행'이면 다시 연다(반대도 처리).
 - 직접 접속(전달분 없음·북마크)은 종전과 완전히 동일. 서버가 제출 때 정원을 다시 검증하므로
   잠깐 옛 남은자리가 보여도 초과 신청은 안 된다.
+
+## GPT-6 Astra(Codex) PR 검토 (2026-09-25)
+루트 `AGENTS.md`는 OpenAI Codex가 PR을 검토할 때 읽는 규칙 파일이다(사용자 결정 — 리포트 저장소 CLAUDE.md 'GPT-6 Astra(Codex) PR 검토 참여' 절 참고). 이 CLAUDE.md에 새 규칙이 생기면 AGENTS.md에도 검토용 한 줄을 더할 것.

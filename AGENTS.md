@@ -1,0 +1,21 @@
+# AGENTS.md — 슈국 주말 실전 모의고사 (shuegukweekendtest)
+
+주말 모의고사 신청(`signup.html`·`signup_teacher.html`·`signup_code.gs`)과 OMR 채점 백엔드(`omr_code.gs`)입니다.
+학생 OMR·성적 관리·회차 분석 **화면의 본체는 hub 저장소**(`shueguk-hub/omr.html`·`omr_teacher.html`·`omr_analysis.html`)이고,
+이 저장소의 `omr_student.html`·`teacher.html`은 옛 UI 원본입니다. 작업 이력은 `CLAUDE.md`에 있습니다.
+
+## Review guidelines
+
+- 리뷰 댓글은 **한국어**로, 비개발자(학원 원장)도 읽을 수 있게 쉬운 말로 씁니다.
+- 신청이 사라지거나 정원을 넘기는 문제, 채점 결과가 어긋나는 문제를 최우선으로 봅니다.
+
+## Code Review Rules
+
+- **신청의 원본은 수파베이스 `signup_entries`**(판정 함수 `signup_days`/`signup_submit`/`signup_mine`)입니다. 시트 기준 통째 재동기화(옛 `sbResyncSignup`)를 되살리는 변경은 방금 신청·삭제를 되돌리므로 지적하세요. 시트는 사본이고 어긋나면 '차이'로 표시만 합니다.
+- 학생 신청은 `signup_submit` 먼저(열림·학년·정원 37 판정 포함) → 성공 시 옛 백엔드에 사본 제출 → 호출 실패 시에만 옛 경로 폴백. 정원·학년 판정을 화면에서만 하고 서버 판정을 빼는 변경은 지적하세요.
+- 설정(신청받기·가능 학년)의 원본은 신청 백엔드이고 `signup_settings`는 미러입니다.
+- **회차·응답의 원본은 수파베이스 `omr_exams`·`omr_responses`**(채점도 DB 함수). OMR 화면 수정은 hub 쪽 파일에서 합니다. 이 저장소의 옛 화면을 고치는 PR은 hub 쪽도 바뀌었는지 확인하세요.
+- 통합형(`mode:'통합'`, 1~45 공통, 영역 11개)과 고3형(선택과목) 두 형식을 병행합니다. 한쪽 채점을 깨는 변경은 지적하세요.
+- Apps Script 재배포는 기존 배포 ID를 새 버전으로 올립니다. 새 배포(주소 변경)를 만들면 학생 페이지가 깨집니다.
+- 구글시트에 날짜·문구를 쓸 때는 텍스트 강제(`setNumberFormat('@')`), 읽을 때는 Date 객체도 허용.
+- 폰트는 고운 바탕·고운 돋움·도현체만. UI에 컬러 이모지 아이콘 금지. 제목 상자는 흰 바탕 + 둥근 모서리 + 옅은 그림자만(왼쪽 색 띠 금지 — `omr_student.html`의 `.title-bar`가 기준).
