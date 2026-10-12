@@ -11,6 +11,7 @@
 
 ## Code Review Rules
 
+- 교사 페이지는 `<head>` 맨 앞에 허브 로그인 게이트 `<script src="https://coke4497-sys.github.io/shueguk-hub/assets/teacher-gate.js"></script>`를 둡니다(2026-10-12). 새 교사 페이지에 빠졌거나, **학생 페이지·공개 안내문에 들어간** 변경은 지적하세요. 게이트가 window.fetch를 바꾸거나 github.io 밖(로컬)에서 켜지게 하는 변경도 지적하세요.
 - **신청의 원본은 수파베이스 `signup_entries`**(판정 함수 `signup_days`/`signup_submit`/`signup_mine`)입니다. 시트 기준 통째 재동기화(옛 `sbResyncSignup`)를 되살리는 변경은 방금 신청·삭제를 되돌리므로 지적하세요. 시트는 사본이고 어긋나면 '차이'로 표시만 합니다.
 - 학생 신청은 `signup_submit` 먼저(열림·학년·정원 37 판정 포함) → 성공 시 옛 백엔드에 사본 제출 → 호출 실패 시에만 옛 경로 폴백. 정원·학년 판정을 화면에서만 하고 서버 판정을 빼는 변경은 지적하세요.
 - 설정(신청받기·가능 학년)의 원본은 신청 백엔드이고 `signup_settings`는 미러입니다.
